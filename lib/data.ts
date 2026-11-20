@@ -1,7 +1,12 @@
 import { db, ready } from "./db";
 import { PublicError } from "./errors";
 import { gameInfo } from "./games/catalog";
+import { settleBot, withBot, withScotlandCrew } from "./games/bot";
 import { applyMatch, assertAction, createMatch, forfeit, tickMatch, viewMatch } from "./games/engine";
+import { memoPairs } from "./games/memo";
+import { stapelStock } from "./games/stapel";
+import { vierFeld } from "./games/vier";
+import { wizardBlatt } from "./games/wizard";
 import type { CityId } from "./games/city-maps";
 import type { GameId, GameState, Tempo } from "./games/types";
 import type { Command } from "./parse";
@@ -20,7 +25,7 @@ type GameRow = {
   host_id: string;
   status: "lobby" | "playing" | "finished";
   state: GameState | Record<string, never>;
-  options: { tempo?: Tempo; city?: CityId };
+  options: { tempo?: Tempo; city?: CityId; memo?: number; vier?: string; blatt?: string; vorrat?: number };
   version: number;
 };
 
@@ -28,7 +33,7 @@ type SeatRow = { user_id: string; seat: number; ready: boolean; name: string };
 
 function seatName(name: string | null | undefined) {
   const clean = name?.trim();
-  return clean && clean.length > 0 ? clean : "honeyheart";
+  return clean && clean.length > 0 ? clean : "Jemand";
 }
 
 function asJson<T>(value: unknown, fallback: T): T {
@@ -112,15 +117,18 @@ async function commit(id: string, version: number, status: string, state: unknow
 async function withTick(game: GameRow, depth = 0): Promise<GameRow> {
   if (game.status !== "playing" || depth > 2) return game;
   const state = structuredClone(game.state) as GameState;
-  if (!state.kind || !tickMatch(state)) return game;
-  const status = state.phase === "done" ? "finished" : "playing";
-  const version = await commit(game.id, game.version, status, state, game.options);
+  if (!state.kind) return game;
+  const ticked = tickMatch(state);
+  const settled = settleBot(state);
+  if (!ticked && settled === state) return game;
+  const status = settled.phase === "done" ? "finished" : "playing";
+  const version = await commit(game.id, game.version, status, settled, game.options);
   if (!version) {
     const fresh = await gameById(game.id);
     if (!fresh) throw new PublicError("Diesen Tisch gibt es nicht.", 404);
     return withTick(fresh, depth + 1);
   }
-  return { ...game, state, status, version };
+  return { ...game, state: settled, status, version };
 }
 
 function turnFor(view: NonNullable<TablePayload["view"]>) {
@@ -142,6 +150,10 @@ function present(game: GameRow, seats: SeatRow[], userId: string): TablePayload 
     version: game.version,
     tempo: game.options.tempo === "voll" ? "voll" : "kurz",
     city: chosenCity(game.options.city),
+    memo: memoPairs(game.options.memo),
+    vier: vierFeld(game.options.vier),
+    blatt: wizardBlatt(game.options.blatt),
+    vorrat: stapelStock(game.options.vorrat),
     players: seats.map((seat) => ({
       id: seat.user_id,
       name: seat.name,
@@ -267,9 +279,17 @@ export async function act(userId: string, gameId: string, version: number, comma
     const nextOptions = {
       tempo: game.options.tempo === "voll" ? "voll" : "kurz",
       city: chosenCity(game.options.city),
+      memo: memoPairs(game.options.memo),
+      vier: vierFeld(game.options.vier),
+      blatt: wizardBlatt(game.options.blatt),
+      vorrat: stapelStock(game.options.vorrat),
     };
     if (command.tempo) nextOptions.tempo = command.tempo;
     if (command.city) nextOptions.city = command.city;
+    if (command.memo) nextOptions.memo = command.memo;
+    if (command.vier) nextOptions.vier = command.vier;
+    if (command.blatt) nextOptions.blatt = command.blatt;
+    if (command.vorrat) nextOptions.vorrat = command.vorrat;
     await db()`UPDATE games SET options = ${JSON.stringify(nextOptions)}::jsonb, version = version + 1, updated_at = now() WHERE id = ${game.id}`;
     return loadTable(userId, game.id);
   }
@@ -314,19 +334,42 @@ export async function act(userId: string, gameId: string, version: number, comma
     if (game.host_id !== userId) throw new PublicError("Nur die gastgebende Person startet.");
     if (game.status !== "lobby") throw new PublicError("Die Runde läuft schon.");
     const fresh = await seatsOf(game.id);
-    if (fresh.length < info.min) throw new PublicError(`Dafür brauchen wir ${info.min} Leute.`);
     if (fresh.length > info.max) throw new PublicError("Es sitzen zu viele Leute.");
     if (fresh.some((seat) => !seat.ready)) throw new PublicError("Es haben noch nicht alle zugesagt.");
+    let roster = fresh.map((seat) => ({ id: seat.user_id, name: seat.name }));
+    if (game.type === "scotland") roster = withScotlandCrew(roster);
+    else if (roster.length === 1) roster = withBot(roster);
+    else if (roster.length < info.min) throw new PublicError(`Dafür brauchen wir ${info.min} Leute.`);
     const tempo: Tempo = game.options.tempo === "voll" ? "voll" : "kurz";
     const city = chosenCity(game.options.city);
-    const state = createMatch(
-      game.type,
-      fresh.map((seat) => ({ id: seat.user_id, name: seat.name })),
-      tempo,
-      Math.random,
-      city,
+    const pairs = memoPairs(game.options.memo);
+    const feld = vierFeld(game.options.vier);
+    const blatt = wizardBlatt(game.options.blatt);
+    const vorrat = stapelStock(game.options.vorrat);
+    const state = settleBot(
+      createMatch(game.type, roster, tempo, Math.random, city, pairs, feld, blatt, vorrat),
     );
-    const saved = await commit(game.id, game.version, "playing", state, { tempo, city });
+    const saved = await commit(game.id, game.version, "playing", state, { tempo, city, memo: pairs, vier: feld, blatt, vorrat });
+    if (!saved) throw new PublicError("Jemand war schneller. Nochmal.", 409);
+    return loadTable(userId, game.id);
+  }
+
+  if (command.type === "again") {
+    if (game.status !== "finished") throw new PublicError("Die Runde läuft noch.");
+    const fresh = await seatsOf(game.id);
+    if (fresh.length > info.max) throw new PublicError("Es sitzen zu viele Leute.");
+    let roster = fresh.map((seat) => ({ id: seat.user_id, name: seat.name }));
+    if (game.type === "scotland") roster = withScotlandCrew(roster);
+    else if (roster.length === 1) roster = withBot(roster);
+    else if (roster.length < info.min) throw new PublicError(`Dafür brauchen wir ${info.min} Leute.`);
+    const tempo: Tempo = game.options.tempo === "voll" ? "voll" : "kurz";
+    const city = chosenCity(game.options.city);
+    const pairs = memoPairs(game.options.memo);
+    const feld = vierFeld(game.options.vier);
+    const blatt = wizardBlatt(game.options.blatt);
+    const vorrat = stapelStock(game.options.vorrat);
+    const state = settleBot(createMatch(game.type, roster, tempo, Math.random, city, pairs, feld, blatt, vorrat));
+    const saved = await commit(game.id, game.version, "playing", state, { tempo, city, memo: pairs, vier: feld, blatt, vorrat });
     if (!saved) throw new PublicError("Jemand war schneller. Nochmal.", 409);
     return loadTable(userId, game.id);
   }
@@ -342,7 +385,7 @@ export async function act(userId: string, gameId: string, version: number, comma
     throw new PublicError("Die Zeit ist um.");
   }
   assertAction(state, command);
-  const next = applyMatch(state, userId, command);
+  const next = settleBot(applyMatch(state, userId, command));
   const status = next.phase === "done" ? "finished" : "playing";
   const saved = await commit(game.id, version, status, next, game.options);
   if (!saved) throw new PublicError("Jemand war schneller. Nochmal.", 409);

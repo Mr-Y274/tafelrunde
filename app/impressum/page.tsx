@@ -8,12 +8,12 @@ export const metadata: Metadata = {
 export default function ImpressumPage() {
   return (
     <main className="wrap py-10">
-      <Link href="/" className="font-display text-2xl">
+      <Link href="/" className="font-display text-[22px] font-bold tracking-tight">
         Tafelrunde
       </Link>
-      <p className="kicker mt-12 text-gold">Impressum</p>
-      <h1 className="font-display mt-3 text-5xl">Angaben gemäß § 5 DDG</h1>
-      <div className="mt-8 max-w-xl space-y-6 text-paper/80">
+      <p className="kicker mt-8 text-gold">Impressum</p>
+      <h1 className="title mt-3">Angaben gemäß § 5 DDG</h1>
+      <div className="copy mt-6 max-w-2xl space-y-4 text-paper/80">
         <p>
           Max Ritschel
           <br />

@@ -75,6 +75,7 @@ const STATEMENTS = [
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`,
   `ALTER TABLE guests ADD COLUMN IF NOT EXISTS name TEXT`,
+  `ALTER TABLE guests ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ`,
   `CREATE UNIQUE INDEX IF NOT EXISTS guests_name_lower ON guests (lower(name))`,
   `CREATE TABLE IF NOT EXISTS guest_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

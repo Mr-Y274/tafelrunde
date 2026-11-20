@@ -39,7 +39,7 @@ export function Anleitung({ id, tone = "line" }: { id: GameId; tone?: "line" | "
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="kicker text-cinnabar">{info.players}</p>
-              <h2 id={titleId} className="font-display text-4xl">
+              <h2 id={titleId} className="font-display text-[28px] font-bold tracking-tight">
                 {info.name}
               </h2>
             </div>

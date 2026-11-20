@@ -1,20 +1,20 @@
 import { PublicError } from "./errors";
+import { riskoLand } from "./games/risko-map";
 import { PEN_SIZES, PENCILS } from "./games/sketch";
-import type { LoveAnimal } from "./games/love";
 import type { Action, ShipId, Suit, TravelTicket, UnoColor } from "./games/types";
 
 const SHIPS: ShipId[] = ["schlacht", "kreuzer", "zerstorer", "uboot", "boot"];
-const SUITS: Suit[] = ["rot", "gelb", "gruen", "blau"];
+const COLORS: Suit[] = ["rot", "gelb", "gruen", "blau"];
+const SUITS: Suit[] = [...COLORS, "kreuz", "pik", "herz", "karo"];
 const TICKETS: TravelTicket[] = ["taxi", "bus", "ug", "black"];
 const RIDES = [...TICKETS, "heli"] as const;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const LOVE: LoveAnimal[] = ["hase", "baer", "fuchs", "eule"];
-
 export type Command =
   | { type: "ready"; ready: boolean }
   | { type: "start" }
+  | { type: "again" }
   | { type: "leave" }
-  | { type: "options"; tempo?: "kurz" | "voll"; city?: "london" | "paris" | "barcelona" }
+  | { type: "options"; tempo?: "kurz" | "voll"; city?: "london" | "paris" | "barcelona"; memo?: 6 | 10 | 15; vier?: "klein" | "mittel" | "gross"; blatt?: "farbe" | "skat"; vorrat?: 10 | 20 | 30 }
   | { type: "invite"; username: string }
   | { type: "kick"; userId: string }
   | Action;
@@ -22,6 +22,11 @@ export type Command =
 function record(input: unknown) {
   if (!input || typeof input !== "object") throw new PublicError("Unlesbare Aktion.");
   return input as Record<string, unknown>;
+}
+
+function landId(value: unknown) {
+  if (typeof value !== "string" || !riskoLand(value)) throw new PublicError("Das Land gibt es nicht.");
+  return value;
 }
 
 function cardId(value: unknown) {
@@ -41,6 +46,7 @@ export function parseCommand(input: unknown): { version: number; command: Comman
   if (type === "ready") return { version, command: { type, ready: body.ready === true } };
   if (
     type === "start" ||
+    type === "again" ||
     type === "leave" ||
     type === "undo" ||
     type === "clear" ||
@@ -49,16 +55,20 @@ export function parseCommand(input: unknown): { version: number; command: Comman
     type === "uno-pass" ||
     type === "uno-catch" ||
     type === "memo-hide" ||
-    type === "mau-draw" ||
-    type === "mau-keep"
+    type === "risko-halt" ||
+    type === "risko-end"
   ) {
     return { version, command: { type } };
   }
   if (type === "options") {
     const tempo = body.tempo === "kurz" || body.tempo === "voll" ? body.tempo : undefined;
     const city = body.city === "london" || body.city === "paris" || body.city === "barcelona" ? body.city : undefined;
-    if (!tempo && !city) throw new PublicError("Die Einstellung stimmt nicht.");
-    return { version, command: { type, tempo, city } };
+    const memo = body.memo === 6 || body.memo === 10 || body.memo === 15 ? body.memo : undefined;
+    const vier = body.vier === "klein" || body.vier === "mittel" || body.vier === "gross" ? body.vier : undefined;
+    const blatt = body.blatt === "farbe" || body.blatt === "skat" ? body.blatt : undefined;
+    const vorrat = body.vorrat === 10 || body.vorrat === 20 || body.vorrat === 30 ? body.vorrat : undefined;
+    if (!tempo && !city && !memo && !vier && !blatt && !vorrat) throw new PublicError("Die Einstellung stimmt nicht.");
+    return { version, command: { type, tempo, city, memo, vier, blatt, vorrat } };
   }
   if (type === "invite") {
     if (typeof body.username !== "string") throw new PublicError("Der Benutzername fehlt.");
@@ -70,15 +80,18 @@ export function parseCommand(input: unknown): { version: number; command: Comman
   }
   if (type === "bid") return { version, command: { type, n: int(body.n, 0, 20, "Die Ansage stimmt nicht.") } };
   if (type === "trump" || type === "uno-color") {
-    if (!SUITS.includes(body.suit as Suit) && !SUITS.includes(body.color as Suit)) throw new PublicError("Diese Farbe gibt es nicht.");
-    if (type === "trump") return { version, command: { type, suit: body.suit as Suit } };
+    if (type === "trump") {
+      if (!SUITS.includes(body.suit as Suit)) throw new PublicError("Diese Farbe gibt es nicht.");
+      return { version, command: { type, suit: body.suit as Suit } };
+    }
+    if (!COLORS.includes(body.color as Suit)) throw new PublicError("Diese Farbe gibt es nicht.");
     return { version, command: { type, color: body.color as UnoColor } };
   }
   if (type === "card" || type === "uno-play") {
     if (typeof body.id !== "string" || body.id.length < 1 || body.id.length > 80) throw new PublicError("Die Karte fehlt.");
     if (type === "card") return { version, command: { type, id: body.id } };
     const color = body.color == null ? undefined : (body.color as UnoColor);
-    if (color && !SUITS.includes(color)) throw new PublicError("Diese Farbe gibt es nicht.");
+    if (color && !COLORS.includes(color)) throw new PublicError("Diese Farbe gibt es nicht.");
     return { version, command: { type, id: body.id, color, uno: body.uno === true } };
   }
   if (type === "uno-challenge") return { version, command: { type, challenge: body.challenge === true } };
@@ -157,11 +170,25 @@ export function parseCommand(input: unknown): { version: number; command: Comman
     return { version, command: { type, id, slot: int(body.slot, 0, 3, "Die Ablage gibt es nicht.") } };
   }
   if (type === "memo-flip") return { version, command: { type, index: int(body.index, 0, 40, "Die Karte liegt nicht da.") } };
-  if (type === "vier-drop") return { version, command: { type, col: int(body.col, 0, 6, "Die Spalte gibt es nicht.") } };
-  if (type === "mau-play") {
-    const animal = body.animal == null ? undefined : (body.animal as LoveAnimal);
-    if (animal && !LOVE.includes(animal)) throw new PublicError("Dieses Tier gibt es nicht.");
-    return { version, command: { type, id: cardId(body.id), animal } };
+  if (type === "vier-drop") return { version, command: { type, col: int(body.col, 0, 8, "Die Spalte gibt es nicht.") } };
+  if (type === "risko-place" || type === "risko-dump") return { version, command: { type, id: landId(body.id) } };
+  if (type === "risko-attack") {
+    const dice = body.dice == null ? undefined : int(body.dice, 1, 3, "So viele Würfel gibt es nicht.");
+    return { version, command: { type, from: landId(body.from), to: landId(body.to), dice } };
+  }
+  if (type === "risko-fortify") {
+    const n = body.n == null ? undefined : int(body.n, 1, 200, "So viele Armeen kannst du nicht schieben.");
+    return { version, command: { type, from: landId(body.from), to: landId(body.to), n } };
+  }
+  if (type === "risko-occupy") return { version, command: { type, n: int(body.n, 1, 200, "So viele Armeen kannst du nicht nachziehen.") } };
+  if (type === "risko-trade") {
+    if (!Array.isArray(body.ids) || body.ids.length !== 3) throw new PublicError("Ein Satz hat drei Karten.");
+    const ids = body.ids.map((id) => {
+      if (typeof id !== "string" || id.length < 1 || id.length > 40) throw new PublicError("Die Karte gibt es nicht.");
+      return id;
+    });
+    const onto = body.onto == null || body.onto === "" ? undefined : landId(body.onto);
+    return { version, command: { type, ids, onto } };
   }
   if (type === "guess") {
     if (typeof body.text !== "string") throw new PublicError("Der Tipp fehlt.");

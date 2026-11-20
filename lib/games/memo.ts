@@ -1,10 +1,15 @@
 import { PublicError } from "../errors";
 import { MEMO_FRIENDS } from "./love";
-import type { Action, MemoState, MemoView, Player, Tempo } from "./types";
+import type { Action, MemoState, MemoView, Player } from "./types";
 import { pushLog, shuffle } from "./util";
 
-export function createMemo(players: Player[], tempo: Tempo, rng: () => number = Math.random): MemoState {
-  const pairs = tempo === "voll" ? 15 : 8;
+export type MemoPairs = 6 | 10 | 15;
+
+export function memoPairs(value: unknown): MemoPairs {
+  return value === 6 || value === 10 || value === 15 ? value : 10;
+}
+
+export function createMemo(players: Player[], pairs: MemoPairs = 10, rng: () => number = Math.random): MemoState {
   const friends = MEMO_FRIENDS.slice(0, pairs);
   const tiles = shuffle(
     friends.flatMap(([animal, mark]) => [
@@ -17,7 +22,7 @@ export function createMemo(players: Player[], tempo: Tempo, rng: () => number = 
     kind: "memo",
     players,
     tiles,
-    cols: pairs > 8 ? 6 : 4,
+    cols: pairs === 15 ? 6 : pairs === 10 ? 5 : 4,
     open: [],
     turn: 0,
     scores: players.map(() => 0),

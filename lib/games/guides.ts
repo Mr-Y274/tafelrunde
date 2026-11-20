@@ -7,7 +7,8 @@ export const GUIDES: Record<GameId, GuideSection[]> = {
     {
       title: "Die Runde",
       lines: [
-        "Kurz sind 6 Runden. Voll geht so lange, bis der Stapel leer ist. Zu zweit sind das 30 Runden.",
+        "Kurz sind 6 Runden. Voll geht so lange, bis der Stapel leer ist. Zu zweit sind das 30 Runden mit dem Farbblatt und 20 mit dem Skatblatt.",
+        "Das Farbblatt hat Rot, Gelb, Grün und Blau, jeweils von 1 bis 13. Das Skatblatt hat Kreuz, Pik, Herz und Karo, von 7 bis Ass. Beide haben vier Zauberer und vier Narren.",
         "Jede Runde gibt es eine Karte mehr. In der ersten Runde eine, dann zwei, und so weiter.",
         "Gegeben wird reihum. Die oberste Karte danach liegt offen und bestimmt den Trumpf.",
       ],
@@ -59,36 +60,34 @@ export const GUIDES: Record<GameId, GuideSection[]> = {
     {
       title: "Die Jagd",
       lines: [
-        "Mr. X wird ausgelost. Alle wissen, wer es ist. Niemand sieht, wo. Zu zweit jagt ein Detektiv allein.",
-        "Drei Städte: London, Paris und Barcelona. Hinter dem Netz liegt ein Bild der Stadt, Taxi, Bus, U-Bahn und manchmal eine Fähre.",
-        "Kurz ist schwer für Mr. X. Er startet in der Mitte, die Detektive auf nahen Feldern. 13 Runden, sichtbar in 3, 8 und 13.",
-        "Voll ist leichter für Mr. X. Er startet am Rand, die Detektive weit weg. 22 Runden, sichtbar in 3, 8, 13, 18 und 22.",
-        "Jedes Startfeld ist vorgegeben. Mr. X bleibt verdeckt, bis eine Sichtbarkeitsrunde kommt.",
+        "Mr. X wird ausgelost. Alle wissen, wer es ist. Niemand sieht, wo er steht.",
+        "London, Paris oder Barcelona. Jede Karte hat 199 Stationen. Gelb ist Taxi, Grün der Bus, Rot die U-Bahn, Schwarz gestrichelt die Fähre.",
+        "Die Startfelder werden gezogen. Keine zwei Figuren beginnen auf derselben Station.",
+        "Das Spiel dauert 24 Züge von Mr. X. Er zieht immer zuerst, danach die Detektive der Reihe nach. Fehlen Figuren bis drei, spielt sie der Detektiv mit.",
       ],
     },
     {
       title: "Fahrscheine",
       lines: [
-        "Detektive: 10 Taxi, 8 Bus, 4 U-Bahn.",
-        "Mr. X: 4 Taxi, 3 Bus, 3 U-Bahn, 5 Schwarz, 2 Doppelzüge, 2 Hubschrauber.",
-        "Die Fähre fährt nur mit einem schwarzen Fahrschein. Ein Doppelzug sind zwei Fahrten hintereinander und zählt nicht zusammen mit dem Hubschrauber.",
-        "Der Hubschrauber fliegt zur nächsten Sehenswürdigkeit dieser Stadt.",
+        "Jeder Detektiv beginnt mit 10 Taxi, 8 Bus und 4 U-Bahn. Das benutzte Ticket bekommt Mr. X.",
+        "Mr. X beginnt mit 4 Taxi, 3 Bus, 3 U-Bahn und 2 Doppelzügen. Schwarz gibt es so viele, wie Detektive mitspielen.",
+        "Schwarz darf jedes Verkehrsmittel nehmen, auch die Fähre. Die Detektive sehen dann nur Schwarz, nicht womit er gefahren ist.",
+        "Ein Doppelzug sind zwei Fahrten hintereinander. Dafür verbraucht er zwei Tickets und zwei Runden.",
       ],
     },
     {
-      title: "Die Ermittlung",
+      title: "Das Fahrtenbuch",
       lines: [
-        "Einmal pro Detektivrunde ermittelt die Person, die gerade dran ist. Das Ergebnis sehen die Detektive, Mr. X nicht.",
-        "Analyse zeigt, auf welchen Stationen Mr. X noch sein kann. Ortung sagt zu jedem Funkmast, ob er nah, mittel oder fern ist.",
-        "Abtasten nennt die Taxischritte bis zum nächsten Funkmast. Befragung fragt die drei Sehenswürdigkeiten der Stadt: hier, vor kurzem oder still.",
+        "In den Runden 3, 8, 13, 18 und 24 zeigt Mr. X seine Station. Dazwischen bleibt ein Ring auf der letzten sichtbaren Station.",
+        "In allen anderen Runden steht im Fahrtenbuch nur das Ticket: Taxi, Bus, U-Bahn oder Schwarz.",
       ],
     },
     {
-      title: "Treffpunkte und Ende",
+      title: "Das Ende",
       lines: [
-        "Mr. X bekommt nach und nach fünf Treffpunkte gezeigt. Nur ein gezeigter Punkt zählt, und nur wenn er während eines Zugs dort landet.",
-        "Zwei Treffpunkte gewinnen sofort. Am Ende reicht einer zum Entkommen. Ohne Treffpunkt gewinnen die Detektive.",
-        "Steht ein Detektiv auf derselben Station wie Mr. X, ist er gefasst. Kommt Mr. X nicht mehr weg, gewinnen die Detektive ebenfalls.",
+        "Detektive dürfen nicht auf derselben Station stehen. Wer nicht mehr fahren kann, setzt aus.",
+        "Die Detektive gewinnen, sobald eine Figur auf der Station von Mr. X steht.",
+        "Mr. X gewinnt nach Zug 24 oder wenn sich kein Detektiv mehr bewegen kann.",
       ],
     },
   ],
@@ -97,7 +96,7 @@ export const GUIDES: Record<GameId, GuideSection[]> = {
       title: "Die Karten",
       lines: [
         "Sieben Karten. Die oberste liegt offen und gibt Farbe und Symbol vor.",
-        "Du legst eine Karte derselben Farbe oder desselben Symbols. Ein Joker geht immer, du suchst danach die Farbe aus.",
+        "Du legst eine Karte derselben Farbe oder desselben Symbols. Rainbow geht immer, du suchst danach die Farbe aus.",
         "Passt nichts, ziehst du eine Karte. Passt sie, darfst du sie legen oder behalten.",
       ],
     },
@@ -105,7 +104,7 @@ export const GUIDES: Record<GameId, GuideSection[]> = {
       title: "Sonderkarten",
       lines: [
         "Aussetzen überspringt die nächste Person. Richtungswechsel dreht die Runde. Zu zweit ist der Richtungswechsel ein Aussetzen.",
-        "+2 lässt die nächste Person zwei Karten ziehen. +4 sucht die Farbe und lässt vier ziehen.",
+        "+2 lässt sich auf jede +2 legen, egal welche Farbe. Die nächste Person zieht die Summe oder legt selbst eine +2. +4 sucht die Farbe und lässt vier ziehen.",
         "+4 darfst du anzweifeln. Hatte die Person die alte Farbe auf der Hand, zieht sie selbst vier. Sonst ziehst du sechs.",
       ],
     },
@@ -113,7 +112,7 @@ export const GUIDES: Record<GameId, GuideSection[]> = {
       title: "Uno und Punkte",
       lines: [
         "Bei einer Karte musst du Uno sagen. Wer es vergisst, kann erwischt werden und zieht zwei.",
-        "Wer zuerst nichts mehr hat, bekommt die Punkte der übrigen Karten. Zahlen zählen ihren Wert, Sonderkarten 20, Joker 50.",
+        "Wer zuerst nichts mehr hat, bekommt die Punkte der übrigen Karten. Zahlen zählen ihren Wert, Sonderkarten 20, Rainbow und +4 je 50.",
         "Kurze Partie bis 100, lange bis 200. Wer das Ziel erreicht oder übersteigt, gewinnt.",
       ],
     },
@@ -140,9 +139,9 @@ export const GUIDES: Record<GameId, GuideSection[]> = {
     {
       title: "Die Karten",
       lines: [
-        "Vier Tiere: Hase, Bär, Fuchs und Eule. Zahlen von 1 bis 12, dazu Kuss und Schlaf.",
+        "Vier Farben: Rot, Gelb, Grün und Blau. Von jeder Zahl 1 bis 12 gibt es zwei Karten, dazu acht Wild und vier Skip.",
         "Zehn Karten. Du ziehst eine Karte, vom Stapel oder von der Ablage, und legst am Ende genau eine ab.",
-        "Schlaf bleibt auf der Ablage liegen. Legst du Schlaf ab, setzt die nächste Person aus. Zu zweit bist du danach noch einmal dran.",
+        "Skip bleibt auf der Ablage liegen. Legst du Skip ab, setzt die nächste Person aus. Zu zweit bist du danach noch einmal dran.",
       ],
     },
     {
@@ -151,16 +150,16 @@ export const GUIDES: Record<GameId, GuideSection[]> = {
         "Kurz sind die ersten vier Aufgaben, voll alle zehn.",
         "1 zwei Sätze zu je drei. 2 ein Satz zu drei und eine Reihe zu vier. 3 ein Satz zu vier und eine Reihe zu vier.",
         "4 eine Reihe zu sieben. 5 eine Reihe zu acht. 6 eine Reihe zu neun.",
-        "7 zwei Sätze zu je vier. 8 sieben Karten von einem Tier. 9 ein Satz zu fünf und ein Paar. 10 ein Satz zu fünf und eine Reihe zu drei.",
-        "Ein Satz sind gleiche Zahlen. Eine Reihe sind aufeinanderfolgende Zahlen. Eine Familie ist ein Tier.",
+        "7 zwei Sätze zu je vier. 8 sieben Karten einer Farbe. 9 ein Satz zu fünf und ein Paar. 10 ein Satz zu fünf und eine Reihe zu drei.",
+        "Ein Satz sind gleiche Zahlen. Eine Reihe sind aufeinanderfolgende Zahlen. Eine Farbe sind Karten derselben Farbe.",
       ],
     },
     {
-      title: "Kuss, Anlegen, Gewinn",
+      title: "Wild, Anlegen, Gewinn",
       lines: [
-        "Der Kuss ist jede Zahl und jedes Tier. Schlaf gehört in keine Aufgabe.",
+        "Wild ist jede Zahl und jede Farbe. Skip gehört in keine Aufgabe.",
         "Liegt deine Aufgabe, darfst du an alle Gruppen auf dem Tisch anlegen. Eine Karte muss zum Ablegen bleiben.",
-        "Wer bei der letzten Aufgabe alle Karten los wird, gewinnt. Übrige Karten zählen als Punkte: die Zahl selbst, Schlaf 10, Kuss 15.",
+        "Wer bei der letzten Aufgabe alle Karten los wird, gewinnt. Übrige Karten zählen als Punkte: 1 bis 9 die Zahl, 10 bis 12 je 10, Skip 15, Wild 25.",
       ],
     },
   ],
@@ -168,17 +167,17 @@ export const GUIDES: Record<GameId, GuideSection[]> = {
     {
       title: "Die Stapel",
       lines: [
-        "Jede Person hat einen verdeckten Liebesstapel. Oben liegt eine Karte offen. Wer ihn leer spielt, gewinnt.",
-        "Zu zweit hat der volle Stapel 15 Karten, der kurze 8. Zu dritt 12 und 6, zu viert 10 und 5, zu fünft und sechst 8 und 5.",
-        "Vier gemeinsame Baustapel wachsen von 1 bis 12. Bei 12 leert sich der Stapel und fängt wieder bei 1 an.",
+        "Jede Person hat einen verdeckten Vorrat. Oben liegt eine Karte offen. Wer ihn leer spielt, gewinnt.",
+        "Der Vorrat hat 10, 20 oder 30 Karten. Zu sechst passen 30 nicht. Auf jeder Ablage sieht man, wie viele Karten liegen und welche, von unten nach oben.",
+        "Vier gemeinsame Baustapel wachsen von 1 bis 12. Bei 12 wird der Stapel weggeräumt und beginnt wieder bei 1.",
       ],
     },
     {
       title: "Der Zug",
       lines: [
         "Zu Beginn füllst du deine Hand auf fünf Karten.",
-        "Du baust aus der Hand, von deinen vier Ablagen oder vom Liebesstapel. Es passt nur die nächste Zahl. Der Kuss ist jede Zahl.",
-        "Eine Karte aus der Hand auf eine Ablage beendet den Zug. Ist die Hand leer, ziehst du neu und spielst weiter.",
+        "Du baust aus der Hand, von deinen vier Ablagen oder vom Vorrat. Es passt nur die nächste Zahl. Skip-Bo ist jede Zahl.",
+        "Eine Karte aus der Hand auf eine Ablage beendet den Zug. Ist die Hand leer, ziehst du fünf neue und spielst weiter.",
       ],
     },
   ],
@@ -186,7 +185,7 @@ export const GUIDES: Record<GameId, GuideSection[]> = {
     {
       title: "Die Tierchen",
       lines: [
-        "Kurz sind acht Paare, voll fünfzehn. Alle Karten liegen verdeckt.",
+        "Das Feld hat 12, 20 oder 30 Kacheln. Alle liegen verdeckt.",
         "Du deckst zwei Karten auf. Passen sie, gehören sie dir und du bleibst dran.",
         "Passen sie nicht, sehen alle hin. Dann deckst du sie zu und die nächste Person sucht.",
       ],
@@ -200,27 +199,34 @@ export const GUIDES: Record<GameId, GuideSection[]> = {
     {
       title: "Das Feld",
       lines: [
-        "Zwei Personen, sieben Spalten, sechs Reihen.",
-        "Abwechselnd fällt ein Herz in eine Spalte und rutscht nach unten.",
+        "Zwei bis vier Personen. Das Feld ist 6×5, 7×6 oder 9×7.",
+        "Reihum fällt ein Herz in eine Spalte und rutscht nach unten. Der letzte Stein ist lila umrandet.",
         "Vier gleiche Herzen waagerecht, senkrecht oder schräg gewinnen. Ist alles voll, ohne vier in einer Reihe, endet es unentschieden.",
       ],
     },
   ],
-  mau: [
+  risko: [
     {
-      title: "Die Karten",
+      title: "Das Brett",
       lines: [
-        "Hase, Bär, Fuchs und Eule, von 7 bis Ass. Kurz fünf Karten, voll sieben, soweit der Stapel reicht.",
-        "Du legst dasselbe Tier oder dieselbe Karte. Passt nichts, ziehst du eine. Passt sie, darfst du sie legen oder behalten.",
-        "Wer zuerst nichts mehr auf der Hand hat, gewinnt.",
+        "2 bis 6 Personen. Nordamerika 5, Südamerika 2, Europa 5, Afrika 3, Asien 7, Australien 2 Extraarmeen, wenn du den Kontinent ganz hältst.",
+        "Zu zweit 40 Armeen, zu dritt 35, zu viert 30, zu fünft 25, zu sechst 20. Auf jedem der 42 Gebiete liegt zuerst eine Armee. Den Rest setzt ihr reihum.",
+        "Gestrichelte Linien sind Seewege und zählen wie eine Grenze.",
       ],
     },
     {
-      title: "Die Sonderkarten",
+      title: "Die drei Phasen",
       lines: [
-        "Der Bube geht immer. Du suchst das nächste Tier aus.",
-        "Die 7 lässt die nächste Person zwei Karten ziehen. Eine weitere 7 stapelt und gibt die Pflicht weiter.",
-        "Die 8 setzt die nächste Person aus. Das Ass dreht die Richtung. Zu zweit lässt das Ass noch einmal legen.",
+        "Verstärken: mindestens 3 Armeen, sonst ein Drittel deiner Gebiete, plus Kontinentbonus. Drei gleiche Symbole oder je eines tauschen 4, 6, 8, 10, 12, 15 und danach je 5 weitere. Ab fünf Karten ist der Tausch Pflicht. Ein eigenes Gebiet aus dem Satz bekommt 2 Armeen direkt.",
+        "Angreifen: vom eigenen Gebiet mit mindestens 2 Armeen auf ein benachbartes fremdes. 1 bis 3 Würfel gegen 1 oder 2. Die höchsten Paare vergleichen sich. Bei Gleichstand bleibt das Gebiet bei der Verteidigung. Danach ziehst du mindestens so viele Armeen nach, wie du Würfel benutzt hast.",
+        "Eroberst du mindestens ein Gebiet, ziehst du am Ende des Angriffs genau eine Karte. Verschieben darfst du danach einmal, über eigene verbundene Gebiete. Eine Armee bleibt immer zurück.",
+      ],
+    },
+    {
+      title: "Das Ende",
+      lines: [
+        "Geheimaufträge: 24 Gebiete, 18 Gebiete mit je 2 Armeen, zwei Kontinente, oder alle Armeen einer Farbe. Ist die Farbe deine eigene oder schon weg, gilt stattdessen: 24 Gebiete.",
+        "Welteroberung gewinnt, wer alle 42 Gebiete hält. Wer allein übrig ist, gewinnt sofort.",
       ],
     },
   ],

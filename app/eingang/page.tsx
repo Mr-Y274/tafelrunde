@@ -7,10 +7,10 @@ export const metadata: Metadata = {
 
 export default function EingangPage() {
   return (
-    <main className="wrap py-16">
+    <main className="wrap py-8 sm:py-16">
       <p className="kicker text-gold">Privat</p>
-      <h1 className="font-display mt-3 max-w-xl text-5xl">Der Kreis bleibt unter sich.</h1>
-      <p className="mt-4 max-w-xl text-lg text-paper/80">
+      <h1 className="title mt-3">Der Kreis bleibt unter sich.</h1>
+      <p className="copy mt-4 text-paper/80">
         Tafelrunde ist ein privates Spiel. Den vierstelligen Code bekommst du von der Person, die dich eingeladen hat.
       </p>
       <EingangForm />

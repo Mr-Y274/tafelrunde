@@ -100,6 +100,9 @@ export function SketchBoard({ view, busy, onAction }: { view: PictionaryView; bu
           <div className="rounded-2xl bg-cinnabar/10 px-4 py-2">
             <p className="kicker">Dein Wort</p>
             <p className="font-display text-3xl">{view.word}</p>
+            <button className="btn btn-line mt-2" disabled={busy || view.skipsLeft <= 0} onClick={() => onAction({ type: "skip" })}>
+              {view.skipsLeft > 0 ? `Überspringen · noch ${view.skipsLeft}` : "Kein Überspringen mehr"}
+            </button>
           </div>
         ) : null}
       </div>
@@ -132,7 +135,7 @@ export function SketchBoard({ view, busy, onAction }: { view: PictionaryView; bu
         onPointerCancel={finish}
       >
         {view.strokes.map((stroke, index) => (
-          <polyline key={`saved-${index}`} points={points(stroke.points)} fill="none" stroke={stroke.color} strokeWidth={stroke.size} strokeLinecap="round" strokeLinejoin="round" />
+          <polyline key={`saved-${index}`} className="fade" points={points(stroke.points)} fill="none" stroke={stroke.color} strokeWidth={stroke.size} strokeLinecap="round" strokeLinejoin="round" />
         ))}
         {held.map((stroke, index) => (
           <polyline key={`held-${index}`} points={points(stroke.points)} fill="none" stroke={stroke.color} strokeWidth={stroke.size} strokeLinecap="round" strokeLinejoin="round" />
@@ -142,16 +145,13 @@ export function SketchBoard({ view, busy, onAction }: { view: PictionaryView; bu
       {view.youDraw ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {PENCILS.map((ink) => (
-            <button key={ink} aria-label={ink} className="h-8 w-8 rounded-full" style={{ background: ink, outline: color === ink ? "2px solid #16130f" : undefined, outlineOffset: 2 }} onClick={() => setColor(ink)} />
+            <button key={ink} aria-label={ink} className="h-11 w-11 rounded-full" style={{ background: ink, outline: color === ink ? "2px solid #16130f" : undefined, outlineOffset: 2 }} onClick={() => setColor(ink)} />
           ))}
           {PEN_SIZES.map((pen) => (
             <button key={pen} className={`btn ${size === pen ? "btn-solid" : "btn-line"}`} onClick={() => setSize(pen)}>
               {pen === 8 ? "Fein" : pen === 16 ? "Mittel" : "Breit"}
             </button>
           ))}
-          <button className="btn btn-line" disabled={busy || view.skipsLeft <= 0} onClick={() => onAction({ type: "skip" })}>
-            Skip · {view.skipsLeft}
-          </button>
           <button className="btn btn-line" disabled={busy} onClick={() => onAction({ type: "undo" })}>
             Zurück
           </button>
@@ -162,7 +162,7 @@ export function SketchBoard({ view, busy, onAction }: { view: PictionaryView; bu
       ) : null}
       {view.youCanGuess ? (
         <form
-          className="mt-4 flex gap-2"
+          className="mt-4 flex flex-col gap-2 sm:flex-row"
           onSubmit={(event) => {
             event.preventDefault();
             const text = guess.trim();
@@ -171,8 +171,8 @@ export function SketchBoard({ view, busy, onAction }: { view: PictionaryView; bu
             setGuess("");
           }}
         >
-          <input className="field" value={guess} onChange={(event) => setGuess(event.target.value)} placeholder="Was ist das?" aria-label="Tipp" maxLength={40} />
-          <button className="btn btn-solid" disabled={busy}>
+          <input className="field" value={guess} onChange={(event) => setGuess(event.target.value)} placeholder="Was ist das?" aria-label="Tipp" enterKeyHint="send" maxLength={40} />
+          <button className="btn btn-solid w-full sm:w-auto" disabled={busy}>
             Raten
           </button>
         </form>

@@ -12,9 +12,8 @@ function deckOf(): StapelCard[] {
   return cards;
 }
 
-export function stapelStock(players: number, tempo: Tempo) {
-  const full = players <= 2 ? 15 : players === 3 ? 12 : players === 4 ? 10 : 8;
-  return tempo === "kurz" ? Math.max(5, Math.ceil(full / 2)) : full;
+export function stapelStock(value: unknown): 10 | 20 | 30 {
+  return value === 20 || value === 30 ? value : 10;
 }
 
 export function stapelNeed(top: number) {
@@ -47,9 +46,10 @@ function fill(state: StapelState, id: string) {
   state.hands[id] = hand;
 }
 
-export function createStapel(players: Player[], tempo: Tempo, rng: () => number = Math.random): StapelState {
+export function createStapel(players: Player[], _tempo: Tempo, rng: () => number = Math.random, stock: 10 | 20 | 30 = 10): StapelState {
+  const size = stapelStock(stock);
+  if (players.length * size > 162) throw new PublicError("Bei so vielen Leuten passen nur 10 oder 20 Karten in den Vorrat.");
   const pile = shuffle(deckOf(), rng);
-  const size = stapelStock(players.length, tempo);
   const state: StapelState = {
     kind: "stapel",
     players,
@@ -72,7 +72,7 @@ export function createStapel(players: Player[], tempo: Tempo, rng: () => number 
   state.deck = pile;
   const first = players[0]!;
   fill(state, first.id);
-  pushLog(state.log, "Die Liebesstapel sind gelegt.");
+  pushLog(state.log, "Die Vorräte sind gelegt.");
   return state;
 }
 
@@ -104,7 +104,7 @@ function finish(state: StapelState, playerId: string) {
   const player = state.players.find((item) => item.id === playerId)!;
   state.phase = "done";
   state.winnerIds = [playerId];
-  state.banner = `${player.name} hat den Liebesstapel leer gespielt.`;
+  state.banner = `${player.name} hat den Vorrat leer gespielt.`;
   pushLog(state.log, state.banner);
 }
 
@@ -132,7 +132,7 @@ export function applyStapel(state: StapelState, userId: string, action: Action):
       state.hands[player.id] = hand.filter((item) => item.id !== card!.id);
     } else if (action.from === "stock") {
       card = stock.at(-1);
-      if (!card) throw new PublicError("Dein Liebesstapel ist leer.");
+      if (!card) throw new PublicError("Dein Vorrat ist leer.");
       if (!stapelFits(card, pileTop(pile))) throw new PublicError("Da passt nur die nächste Zahl.");
       stock.pop();
     } else {
@@ -175,7 +175,12 @@ export function applyStapel(state: StapelState, userId: string, action: Action):
 
 function showBin(cards: StapelCard[]) {
   const top = topOf(cards);
-  return { n: top?.n ?? null, wild: top?.wild, count: cards.length };
+  return {
+    n: top?.n ?? null,
+    wild: top?.wild,
+    count: cards.length,
+    cards: cards.map((card) => ({ n: card.n, wild: card.wild })),
+  };
 }
 
 export function viewStapel(state: StapelState, userId: string): StapelView {

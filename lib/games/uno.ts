@@ -31,7 +31,8 @@ export function colorLabel(color: UnoColor) {
   return "Blau";
 }
 
-export function canPlayUno(cardToPlay: UnoCard, top: UnoCard, color: UnoColor) {
+export function canPlayUno(cardToPlay: UnoCard, top: UnoCard, color: UnoColor, stacking = false) {
+  if (stacking) return cardToPlay.value === "draw2";
   if (cardToPlay.value === "wild" || cardToPlay.value === "wild4") return true;
   if (cardToPlay.color === color) return true;
   if (top.value !== "wild" && top.value !== "wild4" && cardToPlay.value === top.value) return true;
@@ -99,7 +100,7 @@ function startHand(state: UnoState, startIndex: number) {
   } else if (top.value === "draw2") {
     state.phase = "penalty";
     state.pendingDraw = 2;
-    state.banner = `${state.players[state.turn]!.name} zieht 2 und setzt aus.`;
+    state.banner = `${state.players[state.turn]!.name} zieht 2 oder legt eine +2.`;
     return;
   }
   state.banner = `${state.players[state.turn]!.name} ist dran.`;
@@ -182,8 +183,8 @@ function afterCard(state: UnoState, item: UnoCard, previousColor: UnoColor, hadC
   } else if (item.value === "draw2") {
     step(state, 1);
     state.phase = "penalty";
-    state.pendingDraw = 2;
-    state.banner = `${state.players[state.turn]!.name} zieht 2.`;
+    state.pendingDraw += 2;
+    state.banner = `${state.players[state.turn]!.name} zieht ${state.pendingDraw} oder legt eine +2.`;
     return;
   } else if (item.value === "wild4") {
     state.wild4HadColor = hadColor && previousColor === state.color ? hadColor : hadColor;
@@ -303,7 +304,7 @@ export function applyUno(state: UnoState, userId: string, action: Action): UnoSt
   }
 
   if (action.type === "uno-play") {
-    if (state.phase !== "play" && state.phase !== "drawn") throw new PublicError("Du kannst gerade keine Karte legen.");
+    if (state.phase !== "play" && state.phase !== "drawn" && state.phase !== "penalty") throw new PublicError("Du kannst gerade keine Karte legen.");
     requireTurn(state, userId);
     if (state.phase === "drawn" && action.id !== state.drawnId) {
       throw new PublicError("Nach dem Ziehen darfst du nur diese Karte legen.");
@@ -313,7 +314,7 @@ export function applyUno(state: UnoState, userId: string, action: Action): UnoSt
     if (at < 0) throw new PublicError("Die Karte ist nicht auf deiner Hand.");
     const item = hand[at]!;
     const top = state.discard[state.discard.length - 1]!;
-    if (!canPlayUno(item, top, state.color)) throw new PublicError("Die Karte passt nicht.");
+    if (!canPlayUno(item, top, state.color, state.phase === "penalty")) throw new PublicError(state.phase === "penalty" ? "Du kannst nur mit +2 kontern." : "Die Karte passt nicht.");
     if ((item.value === "wild" || item.value === "wild4") && !action.color) {
       throw new PublicError("Wähl eine Farbe.");
     }
@@ -343,6 +344,7 @@ export function viewUno(state: UnoState, userId: string): UnoView {
   const top = state.discard[state.discard.length - 1]!;
   let legalIds: string[] = [];
   if (youAreUp && state.phase === "play") legalIds = hand.filter((item) => canPlayUno(item, top, state.color)).map((item) => item.id);
+  if (youAreUp && state.phase === "penalty") legalIds = hand.filter((item) => item.value === "draw2").map((item) => item.id);
   if (youAreUp && state.phase === "drawn" && state.drawnId) {
     const drawn = hand.find((item) => item.id === state.drawnId);
     if (drawn && canPlayUno(drawn, top, state.color)) legalIds = [drawn.id];

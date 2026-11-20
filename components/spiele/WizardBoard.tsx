@@ -1,28 +1,56 @@
 "use client";
 
-import type { Suit, WCard, WizardView } from "@/lib/games/types";
+import type { Blatt, Suit, WCard, WizardView } from "@/lib/games/types";
 import { Note } from "../Note";
+import { useArrivals } from "../motion";
 
-const SUITS: { id: Suit; label: string; ink: string }[] = [
-  { id: "rot", label: "Rot", ink: "text-[#d6453d]" },
-  { id: "gelb", label: "Gelb", ink: "text-[#b8860b]" },
-  { id: "gruen", label: "Grün", ink: "text-[#2c6b4a]" },
-  { id: "blau", label: "Blau", ink: "text-[#2d62c0]" },
+const SUITS: { id: Suit; label: string; mark: string; paper: string; blatt: Blatt }[] = [
+  { id: "rot", label: "Rot", mark: "", paper: "#e04b43", blatt: "farbe" },
+  { id: "gelb", label: "Gelb", mark: "", paper: "#e2b43a", blatt: "farbe" },
+  { id: "gruen", label: "Grün", mark: "", paper: "#3aaa6a", blatt: "farbe" },
+  { id: "blau", label: "Blau", mark: "", paper: "#3b6fd0", blatt: "farbe" },
+  { id: "kreuz", label: "Kreuz", mark: "♣", paper: "#d7dbe3", blatt: "skat" },
+  { id: "pik", label: "Pik", mark: "♠", paper: "#c9ced6", blatt: "skat" },
+  { id: "herz", label: "Herz", mark: "♥", paper: "#e04b43", blatt: "skat" },
+  { id: "karo", label: "Karo", mark: "♦", paper: "#e04b43", blatt: "skat" },
 ];
 
-function Face({ card }: { card: WCard }) {
-  if (card.t === "W") return <span className="card-face bg-ink text-gold"><b className="text-2xl">✦</b><small>Zauberer</small></span>;
-  if (card.t === "J") return <span className="card-face bg-[repeating-linear-gradient(45deg,#f3eadc,#f3eadc_6px,#16130f_6px,#16130f_8px)] text-ink"><b className="text-2xl">N</b><small>Narr</small></span>;
+function faceRank(rank: number, blatt: Blatt) {
+  if (blatt !== "skat") return String(rank);
+  if (rank === 11) return "B";
+  if (rank === 12) return "D";
+  if (rank === 13) return "K";
+  if (rank === 14) return "A";
+  return String(rank);
+}
+
+function Face({ card, arrive, blatt }: { card: WCard; arrive?: boolean; blatt: Blatt }) {
+  const motion = arrive ? "rise" : "";
+  if (card.t === "W") return <span className={`card-face bg-ink text-gold ${motion}`}><b className="text-2xl">✦</b><small>Zauberer</small></span>;
+  if (card.t === "J") return <span className={`card-face bg-[repeating-linear-gradient(45deg,#f3eadc,#f3eadc_6px,#16130f_6px,#16130f_8px)] text-ink ${motion}`}><b className="text-2xl">N</b><small>Narr</small></span>;
   const suit = SUITS.find((item) => item.id === card.suit);
+  const rank = faceRank(card.rank, blatt);
+  const mark = blatt === "skat" ? (suit?.mark ?? "") : "";
+  const two = rank.length > 1;
+  const size = mark ? (two ? 64 : 100) : two ? 68 : 118;
   return (
-    <span className={`card-face bg-paper ${suit?.ink ?? ""}`}>
-      <b className="text-2xl">{card.rank}</b>
-      <small>{suit?.label}</small>
+    <span className={`card-face overflow-hidden !p-0 ${motion}`} style={{ backgroundColor: suit?.paper ?? "#f3eadc" }}>
+      <svg viewBox="0 0 100 140" className="block h-full w-full" role="img" aria-label={suit ? `${rank} ${suit.label}` : rank}>
+        <text x="50" y={mark ? 62 : 72} textAnchor="middle" dominantBaseline="central" fontSize={size} fontWeight="700" fill="#16130f" fontFamily="var(--font-outfit), sans-serif">
+          {rank}
+        </text>
+        {mark ? (
+          <text x="50" y="122" textAnchor="middle" dominantBaseline="central" fontSize="28" fill="#16130f" fontFamily="var(--font-outfit), sans-serif">
+            {mark}
+          </text>
+        ) : null}
+      </svg>
     </span>
   );
 }
 
 export function WizardBoard({ view, busy, onAction }: { view: WizardView; busy: boolean; onAction: (body: Record<string, unknown>) => Promise<void> }) {
+  const fresh = useArrivals([view.trumpCard ? `trump:${view.trumpCard.id}` : "", ...view.trick.map((item) => `trick:${item.card.id}`), ...view.hand.map((card) => `hand:${card.id}`)], true);
   return (
     <section className="rounded-[1.4rem] bg-[#1d4634] p-4 text-paper md:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -38,11 +66,11 @@ export function WizardBoard({ view, busy, onAction }: { view: WizardView; busy: 
         <Note banner={view.banner} log={view.log} />
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-4">
-        {view.trumpCard ? <Face card={view.trumpCard} /> : <p className="opacity-70">Keine Trumpfkarte</p>}
+        {view.trumpCard ? <Face card={view.trumpCard} blatt={view.blatt} arrive={fresh.has(`trump:${view.trumpCard.id}`)} /> : <p className="opacity-70">Keine Trumpfkarte</p>}
         <div className="flex min-h-24 flex-wrap gap-2">
           {view.trick.map((item) => (
             <div key={item.card.id}>
-              <Face card={item.card} />
+              <Face card={item.card} blatt={view.blatt} arrive={fresh.has(`trick:${item.card.id}`)} />
               <p className="mt-1 text-center text-xs">{item.name}</p>
             </div>
           ))}
@@ -50,7 +78,7 @@ export function WizardBoard({ view, busy, onAction }: { view: WizardView; busy: 
       </div>
       {view.youAreUp && view.phase === "trump" ? (
         <div className="mt-4 flex flex-wrap gap-2">
-          {SUITS.map((suit) => (
+          {SUITS.filter((suit) => suit.blatt === view.blatt).map((suit) => (
             <button key={suit.id} className="btn btn-solid" disabled={busy} onClick={() => onAction({ type: "trump", suit: suit.id })}>
               {suit.label}
             </button>
@@ -79,12 +107,12 @@ export function WizardBoard({ view, busy, onAction }: { view: WizardView; busy: 
           </li>
         ))}
       </ul>
-      <div className="mt-5 flex gap-2 overflow-x-auto pb-2">
+      <div className="mt-5 flex max-w-full gap-2 overflow-x-auto pb-2">
         {view.hand.map((card) => {
           const legal = view.legalIds.includes(card.id);
           return (
             <button key={card.id} disabled={busy || !legal} className={legal ? "" : "opacity-40"} onClick={() => onAction({ type: "card", id: card.id })}>
-              <Face card={card} />
+              <Face card={card} blatt={view.blatt} arrive={fresh.has(`hand:${card.id}`)} />
             </button>
           );
         })}

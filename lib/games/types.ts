@@ -1,10 +1,9 @@
-import type { LoveAnimal } from "./love";
-
-export type GameId = "wizard" | "schiffe" | "scotland" | "uno" | "pictionary" | "zehn" | "stapel" | "memo" | "vier" | "mau";
+export type GameId = "wizard" | "schiffe" | "scotland" | "uno" | "pictionary" | "zehn" | "stapel" | "memo" | "vier" | "risko";
 export type Tempo = "kurz" | "voll";
+export type Blatt = "farbe" | "skat";
 export type Player = { id: string; name: string };
 
-export type Suit = "rot" | "gelb" | "gruen" | "blau";
+export type Suit = "rot" | "gelb" | "gruen" | "blau" | "kreuz" | "pik" | "herz" | "karo";
 export type WCard =
   | { id: string; t: "n"; suit: Suit; rank: number }
   | { id: string; t: "W" }
@@ -47,6 +46,7 @@ export type SketchStroke = { color: string; size: number; points: [number, numbe
 
 export type WizardState = {
   kind: "wizard";
+  blatt: Blatt;
   players: Player[];
   dealer: number;
   round: number;
@@ -111,6 +111,7 @@ export type ScotlandState = {
   players: Player[];
   mrX: string;
   detectives: string[];
+  controls: Record<string, string>;
   positions: Record<string, number | null>;
   tickets: Record<string, ScotlandTickets>;
   round: number;
@@ -150,14 +151,15 @@ export type PictionaryState = {
   winnerIds?: string[];
 };
 
-export type HerzKind = "zahl" | "kuss" | "schlaf";
-export type HerzCard = { id: string; kind: HerzKind; animal: LoveAnimal | null; n: number | null };
+export type PhaseColor = "rot" | "gelb" | "gruen" | "blau";
+export type HerzKind = "zahl" | "wild" | "skip";
+export type HerzCard = { id: string; kind: HerzKind; color: PhaseColor | null; n: number | null };
 export type HerzNeed = "satz" | "reihe" | "familie";
 export type HerzGroup = {
   owner: string;
   kind: HerzNeed;
   face: number;
-  animal: LoveAnimal | null;
+  color: PhaseColor | null;
   low: number;
   high: number;
   cards: HerzCard[];
@@ -184,6 +186,7 @@ export type ZehnState = {
 };
 
 export type StapelCard = { id: string; n: number | null; wild?: boolean };
+export type StapelBin = { n: number | null; wild?: boolean; count: number; cards: { n: number | null; wild?: boolean }[] };
 export type StapelState = {
   kind: "stapel";
   players: Player[];
@@ -214,10 +217,47 @@ export type MemoState = {
   winnerIds?: string[];
 };
 
+export type RiskoPhase = "draft" | "place" | "trade" | "attack" | "occupy" | "fortify" | "done";
+
+export type RiskoCard = {
+  id: string;
+  land: string | null;
+  symbol: "inf" | "kav" | "art" | "joker";
+};
+
+export type RiskoState = {
+  kind: "risko";
+  players: Player[];
+  tempo: Tempo;
+  mode: "auftrag" | "welt";
+  goal: number;
+  lands: Record<string, { owner: number; armies: number }>;
+  pool: number[];
+  turn: number;
+  phase: RiskoPhase;
+  seed: number;
+  last: { from: string; to: string; attack: number[]; defend: number[] } | null;
+  banner: string;
+  log: string[];
+  winnerIds?: string[];
+  deck: RiskoCard[];
+  hands: RiskoCard[][];
+  trades: number;
+  conquered: boolean;
+  cardTaken: boolean;
+  resume: "place" | "attack" | "fortify";
+  occupy: { from: string; to: string; min: number; max: number } | null;
+  missions: string[];
+  eliminatedBy: number[];
+};
+
 export type VierState = {
   kind: "vier";
   players: Player[];
   cells: (number | null)[];
+  cols: number;
+  rows: number;
+  last: number | null;
   turn: number;
   phase: "play" | "done";
   win: number[];
@@ -226,30 +266,11 @@ export type VierState = {
   winnerIds?: string[];
 };
 
-export type MauRank = "7" | "8" | "9" | "10" | "B" | "D" | "K" | "A";
-export type MauCard = { id: string; animal: LoveAnimal; rank: MauRank };
-export type MauState = {
-  kind: "mau";
-  players: Player[];
-  hands: Record<string, MauCard[]>;
-  deck: MauCard[];
-  burned: MauCard[];
-  top: MauCard;
-  animal: LoveAnimal;
-  dir: 1 | -1;
-  turn: number;
-  pending: number;
-  phase: "play" | "drawn" | "done";
-  drawnId: string | null;
-  banner: string;
-  log: string[];
-  winnerIds?: string[];
-};
-
-export type GameState = WizardState | SchiffeState | UnoState | ScotlandState | PictionaryState | ZehnState | StapelState | MemoState | VierState | MauState;
+export type GameState = WizardState | SchiffeState | UnoState | ScotlandState | PictionaryState | ZehnState | StapelState | MemoState | VierState | RiskoState;
 
 export type WizardView = {
   kind: "wizard";
+  blatt: Blatt;
   phase: WizardState["phase"];
   round: number;
   maxRounds: number;
@@ -402,9 +423,9 @@ export type StapelView = {
   hand: StapelCard[];
   stockTop: StapelCard | null;
   stockCount: number;
-  bins: { n: number | null; wild?: boolean; count: number }[];
+  bins: StapelBin[];
   piles: { n: number | null; wild?: boolean }[];
-  others: { id: string; name: string; stock: number; top: StapelCard | null; bins: { n: number | null; wild?: boolean; count: number }[] }[];
+  others: { id: string; name: string; stock: number; top: StapelCard | null; bins: StapelBin[] }[];
   deck: number;
   banner: string;
   log: string[];
@@ -424,6 +445,32 @@ export type MemoView = {
   winnerIds?: string[];
 };
 
+export type RiskoView = {
+  kind: "risko";
+  phase: RiskoPhase;
+  tempo: Tempo;
+  mode: "auftrag" | "welt";
+  goal: number;
+  youAreUp: boolean;
+  turnId: string;
+  you: number;
+  turnPool: number;
+  mustTrade: boolean;
+  tradeValue: number;
+  trades: number;
+  deck: number;
+  conquered: boolean;
+  occupy: { from: string; to: string; min: number; max: number } | null;
+  mission: string | null;
+  hand: { id: string; land: string | null; name: string; symbol: RiskoCard["symbol"] }[];
+  lands: { id: string; owner: number; armies: number }[];
+  rows: { id: string; name: string; color: string; lands: number; armies: number; cards: number; out: boolean }[];
+  last: { from: string; to: string; attack: number[]; defend: number[] } | null;
+  banner: string;
+  log: string[];
+  winnerIds?: string[];
+};
+
 export type VierView = {
   kind: "vier";
   phase: VierState["phase"];
@@ -431,6 +478,9 @@ export type VierView = {
   turnId: string;
   you: number;
   cells: (number | null)[];
+  cols: number;
+  height: number;
+  last: number | null;
   win: number[];
   rows: { id: string; name: string; mark: string }[];
   banner: string;
@@ -438,25 +488,7 @@ export type VierView = {
   winnerIds?: string[];
 };
 
-export type MauView = {
-  kind: "mau";
-  phase: MauState["phase"];
-  youAreUp: boolean;
-  turnId: string;
-  animal: LoveAnimal;
-  top: MauCard;
-  hand: MauCard[];
-  legalIds: string[];
-  pending: number;
-  dir: 1 | -1;
-  deck: number;
-  rows: { id: string; name: string; cards: number }[];
-  banner: string;
-  log: string[];
-  winnerIds?: string[];
-};
-
-export type GameView = WizardView | SchiffeView | UnoView | ScotlandView | PictionaryView | ZehnView | StapelView | MemoView | VierView | MauView;
+export type GameView = WizardView | SchiffeView | UnoView | ScotlandView | PictionaryView | ZehnView | StapelView | MemoView | VierView | RiskoView;
 
 export type Action =
   | { type: "place"; ships: ShipSpec[] }
@@ -487,6 +519,11 @@ export type Action =
   | { type: "memo-flip"; index: number }
   | { type: "memo-hide" }
   | { type: "vier-drop"; col: number }
-  | { type: "mau-play"; id: string; animal?: LoveAnimal }
-  | { type: "mau-draw" }
-  | { type: "mau-keep" };
+  | { type: "risko-place"; id: string }
+  | { type: "risko-dump"; id: string }
+  | { type: "risko-trade"; ids: string[]; onto?: string }
+  | { type: "risko-attack"; from: string; to: string; dice?: number }
+  | { type: "risko-occupy"; n: number }
+  | { type: "risko-halt" }
+  | { type: "risko-fortify"; from: string; to: string; n?: number }
+  | { type: "risko-end" };

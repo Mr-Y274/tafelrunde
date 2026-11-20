@@ -6,8 +6,8 @@ export default function HomePage() {
   return (
     <main>
       <div className="wrap">
-        <header className="py-6">
-          <span className="font-display text-2xl">Tafelrunde</span>
+        <header className="pt-[max(1.5rem,env(safe-area-inset-top))] pb-6">
+          <span className="font-display text-[22px] font-bold tracking-tight">Tafelrunde</span>
         </header>
         <TischApp initial={{ tables: [] }} />
       </div>

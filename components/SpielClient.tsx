@@ -1,13 +1,16 @@
 "use client";
 
 import { gameInfo } from "@/lib/games/catalog";
+import { BOT_NAME } from "@/lib/games/bot-id";
 import type { TablePayload } from "@/lib/payload";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Anleitung } from "./Anleitung";
-import { MauBoard } from "./spiele/MauBoard";
+import { NamenWahl } from "./NamenWahl";
+import { ZoomFeld } from "./ZoomFeld";
 import { MemoBoard } from "./spiele/MemoBoard";
+import { RiskoBoard } from "./spiele/RiskoBoard";
 import { SchiffeBoard } from "./spiele/SchiffeBoard";
 import { ScotlandBoard } from "./spiele/ScotlandBoard";
 import { SketchBoard } from "./spiele/SketchBoard";
@@ -82,15 +85,21 @@ export function SpielClient({ initial }: { initial: TablePayload }) {
   const host = data.hostId === data.you;
 
   return (
+    <NamenWahl>
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+        <div className="min-w-0">
           <p className="kicker text-gold">{info?.players}</p>
-          <h1 className="font-display text-4xl md:text-5xl">{info?.name}</h1>
+          <h1 className="title mt-1">{info?.name}</h1>
         </div>
-        <div className="flex items-center gap-3">
-          <p className="font-display text-3xl tracking-[0.2em]">{data.code}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-[22px] font-bold tracking-tight whitespace-nowrap">{data.code}</p>
           <Anleitung id={data.type} />
+          {data.status === "finished" ? (
+            <button className="btn btn-solid" disabled={busy} onClick={() => act({ type: "again" })}>
+              Noch eine Runde
+            </button>
+          ) : null}
           {data.status === "playing" ? (
             <button className="btn btn-line" disabled={busy} onClick={() => act({ type: "leave" })}>
               Aufgeben
@@ -112,9 +121,9 @@ export function SpielClient({ initial }: { initial: TablePayload }) {
         </p>
       ) : null}
       {data.status === "lobby" ? (
-        <section className="panel grid gap-6 p-6 md:grid-cols-[1.1fr_.9fr]">
+        <section className="panel grid min-w-0 gap-6 p-4 sm:p-6 md:grid-cols-[1.1fr_.9fr]">
           <div>
-            <h2 className="font-display text-3xl">Warten auf die Runde.</h2>
+            <h2 className="font-display text-[22px] font-bold tracking-tight">Warten auf die Runde.</h2>
             <ul className="mt-4 space-y-2">
               {data.players.map((player) => (
                 <li key={player.id} className="flex items-center justify-between gap-3">
@@ -145,16 +154,69 @@ export function SpielClient({ initial }: { initial: TablePayload }) {
                 Aufstehen
               </button>
             </div>
-            {host && data.type !== "schiffe" && data.type !== "vier" ? (
+            {host && data.type === "memo" ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {(
+                  [
+                    [6, "12 Kacheln"],
+                    [10, "20 Kacheln"],
+                    [15, "30 Kacheln"],
+                  ] as const
+                ).map(([pairs, label]) => (
+                  <button key={pairs} className={`btn ${data.memo === pairs ? "btn-solid" : "btn-line"}`} disabled={busy} onClick={() => act({ type: "options", memo: pairs })}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {host && data.type === "stapel" ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {([10, 20, 30] as const).map((size) => (
+                  <button key={size} className={`btn ${data.vorrat === size ? "btn-solid" : "btn-line"}`} disabled={busy} onClick={() => act({ type: "options", vorrat: size })}>
+                    {size} Karten
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {host && data.type === "vier" ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {(
+                  [
+                    ["klein", "6 × 5"],
+                    ["mittel", "7 × 6"],
+                    ["gross", "9 × 7"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button key={id} className={`btn ${data.vier === id ? "btn-solid" : "btn-line"}`} disabled={busy} onClick={() => act({ type: "options", vier: id })}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {host && data.type !== "schiffe" && data.type !== "vier" && data.type !== "memo" && data.type !== "stapel" ? (
               <>
-              <div className="mt-4 flex gap-2">
+              {data.type !== "scotland" ? <div className="mt-4 flex gap-2">
                 <button className={`btn ${data.tempo === "kurz" ? "btn-solid" : "btn-line"}`} disabled={busy} onClick={() => act({ type: "options", tempo: "kurz" })}>
-                  {data.type === "pictionary" ? "Eine Runde" : "Kurz"}
+                  {data.type === "risko" ? "Geheimaufträge" : data.type === "pictionary" ? "Eine Runde" : "Kurz"}
                 </button>
                 <button className={`btn ${data.tempo === "voll" ? "btn-solid" : "btn-line"}`} disabled={busy} onClick={() => act({ type: "options", tempo: "voll" })}>
-                  {data.type === "pictionary" ? "Mehrere Runden" : "Voll"}
+                  {data.type === "risko" ? "Welteroberung" : data.type === "pictionary" ? "Mehrere Runden" : "Voll"}
                 </button>
-              </div>
+              </div> : null}
+              {data.type === "wizard" ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(
+                    [
+                      ["farbe", "Farbblatt"],
+                      ["skat", "Skatblatt"],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button key={id} className={`btn ${data.blatt === id ? "btn-solid" : "btn-line"}`} disabled={busy} onClick={() => act({ type: "options", blatt: id })}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               {data.type === "scotland" ? (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {(
@@ -173,14 +235,16 @@ export function SpielClient({ initial }: { initial: TablePayload }) {
               </>
             ) : null}
             <p className="mt-3 text-sm opacity-60">
-              {data.type === "wizard" ? "Kurz sind 6 Runden, voll die ganze Partie." : null}
+              {data.type === "wizard" ? "Farbblatt hat die Zahlen 1 bis 13. Skatblatt hat Kreuz, Pik, Herz und Karo von 7 bis Ass. Dazu Zauberer und Narren." : null}
               {data.type === "uno" ? "Kurz geht bis 100, voll bis 200." : null}
-              {data.type === "scotland" ? "London, Paris oder Barcelona. Kurz ist schwer für Mr. X, voll leichter. Die Startfelder sind vorgegeben." : null}
+              {data.type === "scotland" ? "London, Paris oder Barcelona, je 199 Stationen. 24 Züge, sichtbar in 3, 8, 13, 18 und 24. Freie Detektive spielst du selbst mit." : null}
               {data.type === "pictionary" ? "Eine Runde heißt, jede Person zeichnet einmal. Mehrere Runden heißt dreimal." : null}
               {data.type === "zehn" ? "Kurz sind vier Aufgaben, voll alle zehn." : null}
-              {data.type === "stapel" ? "Kurz ist der Liebesstapel kleiner, voll größer." : null}
-              {data.type === "memo" ? "Kurz sind acht Paare, voll fünfzehn." : null}
-              {data.type === "mau" ? "Kurz sind fünf Karten, voll sieben." : null}
+              {data.type === "stapel" ? "Der Vorrat hat 10, 20 oder 30 Karten. Zu sechst passen 30 nicht." : null}
+              {data.type === "memo" ? "12, 20 oder 30 Kacheln." : null}
+              {data.type === "vier" ? "2 bis 4 Personen. Feld 6×5, 7×6 oder 9×7." : null}
+              {data.type === "risko" ? "Geheimaufträge sind 14 verdeckte Aufträge. Welteroberung gewinnt, wer alle 42 Gebiete hält." : null}
+              {data.players.length < 2 ? ` Allein starten setzt ${BOT_NAME} dazu.` : null}
             </p>
           </div>
           <div>
@@ -196,6 +260,8 @@ export function SpielClient({ initial }: { initial: TablePayload }) {
           </div>
         </section>
       ) : null}
+      {data.view ? (
+        <ZoomFeld>
       {data.view?.kind === "schiffe" ? <SchiffeBoard view={data.view} busy={busy} onAction={act} /> : null}
       {data.view?.kind === "wizard" ? <WizardBoard view={data.view} busy={busy} onAction={act} /> : null}
       {data.view?.kind === "uno" ? <UnoBoard view={data.view} busy={busy} onAction={act} /> : null}
@@ -205,7 +271,10 @@ export function SpielClient({ initial }: { initial: TablePayload }) {
       {data.view?.kind === "stapel" ? <StapelBoard view={data.view} busy={busy} onAction={act} /> : null}
       {data.view?.kind === "memo" ? <MemoBoard view={data.view} busy={busy} onAction={act} /> : null}
       {data.view?.kind === "vier" ? <VierBoard view={data.view} busy={busy} onAction={act} /> : null}
-      {data.view?.kind === "mau" ? <MauBoard view={data.view} busy={busy} onAction={act} /> : null}
+      {data.view?.kind === "risko" ? <RiskoBoard view={data.view} busy={busy} onAction={act} /> : null}
+        </ZoomFeld>
+      ) : null}
     </div>
+    </NamenWahl>
   );
 }

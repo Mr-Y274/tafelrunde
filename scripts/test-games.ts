@@ -4,12 +4,15 @@ import { applyWizard, createWizard, wizardCanPlay, wizardTrickWinner } from "../
 import { applyUno, createUno, unoCardCount } from "../lib/games/uno";
 import { applyScotland, createScotland, scotlandMoves, viewScotland } from "../lib/games/scotland";
 import { applyPictionary, createPictionary, normalizeGuess, viewPictionary } from "../lib/games/pictionary";
-import { applyMau, createMau, mauCardCount, mauFits } from "../lib/games/mau";
 import { applyMemo, createMemo, viewMemo } from "../lib/games/memo";
-import { applyStapel, createStapel, stapelFits } from "../lib/games/stapel";
+import { applyStapel, createStapel, stapelFits, viewStapel } from "../lib/games/stapel";
+import { applyRisko, createRisko, RISKO_MISSIONS, riskoIsSet } from "../lib/games/risko";
+import { RISKO_LANDS, RISKO_REALMS, RISKO_SEA, riskoNeighbors, tradeValue } from "../lib/games/risko-map";
 import { applyVier, createVier } from "../lib/games/vier";
 import { applyZehn, createZehn, zehnCardCount } from "../lib/games/zehn";
-import type { HerzCard, Player, ScotlandState, UnoState, WCard, WizardState } from "../lib/games/types";
+import type { HerzCard, Player, RiskoState, ScotlandState, UnoState, WCard, WizardState } from "../lib/games/types";
+import { BOT_ID, BOT_NAME } from "../lib/games/bot-id";
+import { settleBot } from "../lib/games/bot";
 import { FLEET } from "../lib/games/fleet";
 
 let failed = 0;
@@ -95,6 +98,10 @@ function playWizard() {
   const pair = createWizard(people(2), "kurz", rng(8));
   check("Wizard zu zweit hat sechs kurze Runden", pair.maxRounds === 6 && pair.players.length === 2);
   check("Wizard zu zweit hat dreißig volle Runden", createWizard(people(2), "voll", rng(8)).maxRounds === 30);
+  const skat = createWizard(people(2), "voll", rng(8), "skat");
+  const skatRanks = Object.values(skat.hands).flat().filter((card) => card.t === "n").map((card) => card.rank);
+  const skatSuits = new Set(Object.values(skat.hands).flat().flatMap((card) => (card.t === "n" ? [card.suit] : [])));
+  check("das Skatblatt hat 20 volle Runden", skat.maxRounds === 20 && skat.blatt === "skat" && skatRanks.every((rank) => rank >= 7 && rank <= 14) && [...skatSuits].every((suit) => suit === "kreuz" || suit === "pik" || suit === "herz" || suit === "karo"));
   let duo = pair;
   let steps = 0;
   while (duo.phase !== "done" && steps < 4000) {
@@ -201,6 +208,22 @@ function playUno() {
   }
   check("Uno läuft ohne Abbruch", guard > 10 && unoCardCount(state) === 108);
 
+  const stacked = createUno(people(3), "kurz");
+  stacked.phase = "play";
+  stacked.pendingDraw = 0;
+  stacked.turn = 0;
+  stacked.color = "rot";
+  stacked.discard = [{ id: "top", color: "gelb", value: "7" }];
+  stacked.hands.p0 = [{ id: "d2a", color: "rot", value: "draw2" }, { id: "stay", color: "blau", value: "4" }];
+  stacked.hands.p1 = [{ id: "d2b", color: "blau", value: "draw2" }, { id: "five", color: "rot", value: "5" }];
+  stacked.hands.p2 = [{ id: "keep", color: "gruen", value: "1" }];
+  let pile = applyUno(stacked, "p0", { type: "uno-play", id: "d2a" });
+  pile = applyUno(pile, "p1", { type: "uno-play", id: "d2b" });
+  check("+2 stapelt sich farbunabhängig", pile.phase === "penalty" && pile.pendingDraw === 4 && pile.turn === 2);
+  const before = pile.hands.p2?.length ?? 0;
+  pile = applyUno(pile, "p2", { type: "uno-draw" });
+  check("danach zieht die nächste Person die Summe", (pile.hands.p2?.length ?? 0) === before + 4);
+
   const rigged = createUno(people(2), "kurz");
   rigged.target = 1;
   rigged.phase = "play";
@@ -217,27 +240,26 @@ function playScotland() {
   const london = cityMap("london");
   const paris = cityMap("paris");
   const barcelona = cityMap("barcelona");
-  check("drei Städte sind verbunden", cityConnected("london") && cityConnected("paris") && cityConnected("barcelona"));
+  const counts = (city: typeof london) => {
+    const tally = { taxi: 0, bus: 0, ug: 0, water: 0 };
+    for (const edge of city.edges) tally[edge.mode] += 1;
+    return tally;
+  };
   check(
-    "jede Stadt hat ein Bild",
-    [london, paris, barcelona].every((city) => city.image.endsWith(".jpg") && city.sights.length === 3 && new Set(city.masts.map((mast) => mast.id)).size === 4),
+    "drei Städte haben 199 Stationen und dieselbe Balance",
+    [london, paris, barcelona].every((city) => {
+      const tally = counts(city);
+      const ids = new Set(city.stations.map((spot) => spot.id));
+      return city.stations.length === 199 && ids.size === 199 && tally.taxi === 346 && tally.bus === 99 && tally.ug === 20 && tally.water === 3 && city.starts.length === 18 && city.radios.length === 4;
+    }) && cityConnected("london") && cityConnected("paris") && cityConnected("barcelona"),
   );
-  const pair = createScotland(people(2), "kurz", () => 0, "london");
-  check("Scotland Yard zu zweit hat einen Detektiv", pair.detectives.length === 1 && pair.city === "london");
+  const hunt = createScotland(people(4), "kurz", () => 0, "london");
+  const started = [hunt.positions[hunt.mrX], ...hunt.detectives.map((id) => hunt.positions[id])];
   check(
-    "kurze Jagd gibt enge Startfelder",
-    pair.phase === "mrx" && pair.positions[pair.mrX] === london.opening.kurz[0] && pair.positions[pair.detectives[0]!] === london.opening.kurz[1],
+    "vier Personen, 24 Runden, gezogene Startfelder",
+    hunt.detectives.length === 3 && hunt.maxRounds === 24 && hunt.reveals.join() === "3,8,13,18,24" && hunt.tickets[hunt.mrX]?.black === 3 && hunt.tickets[hunt.mrX]?.double === 2 && new Set(started).size === 4 && started.every((id) => london.starts.includes(id ?? -1)),
   );
-  const easy = createScotland(people(2), "voll", () => 0, "paris");
-  check(
-    "lange Jagd in Paris stellt Mr. X an den Rand",
-    easy.city === "paris" && easy.positions[easy.mrX] === paris.opening.voll[0] && easy.positions[easy.detectives[0]!] === paris.opening.voll[1] && easy.maxRounds === 22,
-  );
-  const spain = createScotland(people(2), "kurz", () => 0, "barcelona");
-  check("Barcelona hat eigene Startfelder", spain.city === "barcelona" && spain.positions[spain.mrX] === barcelona.opening.kurz[0]);
-  const crowd = createScotland(people(5), "kurz", () => 0);
-  const starts = [crowd.positions[crowd.mrX], ...crowd.detectives.map((id) => crowd.positions[id])];
-  check("fünf Startfelder bleiben verschieden", new Set(starts).size === 5 && starts.every((id) => london.stations.some((spot) => spot.id === id)));
+  check("Paris und Barcelona haben eigene Startfelder", createScotland(people(4), "voll", () => 0, "paris").city === "paris" && createScotland(people(4), "kurz", () => 0, "barcelona").city === "barcelona");
   const choosing = createScotland(people(2), "kurz", () => 0);
   choosing.phase = "mrx-start";
   choosing.positions[choosing.mrX] = null;
@@ -250,7 +272,6 @@ function playScotland() {
   }
   check("Start nur auf markierten Feldern", blocked);
   let duo = createScotland(people(2), "kurz", () => 0);
-  check("Scotland Yard zu zweit startet die Jagd", duo.phase === "mrx");
   const water = london.edges.find((edge) => edge.mode === "water")!;
   duo.positions[duo.mrX] = water.a;
   const ferry = scotlandMoves(duo, duo.mrX);
@@ -260,78 +281,81 @@ function playScotland() {
   );
   const hunter = createScotland(people(2), "kurz", () => 0);
   hunter.phase = "det";
+  hunter.picker = 0;
   hunter.positions[hunter.detectives[0]!] = water.a;
   check("Detektiv nimmt keine Fähre", !scotlandMoves(hunter, hunter.detectives[0]!).some((move) => move.to === water.b));
-  let state = createScotland(people(3), "kurz", () => 0);
-  const dets = state.detectives;
-  check("Jagd startet versteckt", state.phase === "mrx");
-  const hidden = viewScotland(state, dets[0]!).positions.find((player) => player.role === "mrx");
+  const hidden = viewScotland(duo, duo.detectives[0]!).positions.find((player) => player.role === "mrx");
   check("Detektiv sieht Mr. X nicht", hidden?.station == null);
-  const random = rng(4);
-  let guard = 0;
-  while (state.phase !== "done" && guard < 500) {
-    guard += 1;
-    const view = viewScotland(state, state.phase === "mrx" || state.phase === "mrx-start" ? state.mrX : state.detectives[state.picker]!);
-    if (view.choices && view.choices.length) {
-      state = applyScotland(state, view.turnId!, { type: "sy-start", station: view.choices[0]! });
-      continue;
-    }
-    const pool = view.moves.filter((move) => (random() > 0.85 ? true : move.doubleTo == null));
-    const move = pool[Math.floor(random() * pool.length)] ?? view.moves[0];
-    if (!move || !view.turnId) break;
-    state = applyScotland(state, view.turnId, {
-      type: "sy-move",
-      to: move.to,
-      ticket: move.ticket,
-      doubleTo: move.doubleTo,
-      doubleTicket: move.doubleTicket,
-    });
-  }
-  check("Scotland Yard endet", state.phase === "done" && (state.winnerIds?.length ?? 0) > 0);
-  const master = createScotland(people(2), "kurz", () => 0);
-  check("Mr. X hat zwei Hubschrauber", master.tickets[master.mrX]?.heli === 2 && master.maxRounds === 13);
-  const sightIds = new Set(london.sights.map((sight) => sight.id));
-  master.positions[master.mrX] = london.opening.kurz[0]!;
-  master.positions[master.detectives[0]!] = london.opening.kurz[1]!;
-  let flying = master;
-  const chopper = scotlandMoves(flying, flying.mrX).filter((move) => move.ticket === "heli");
-  check("Hubschrauber fliegt zu einer Sehenswürdigkeit", chopper.length > 0 && chopper.every((move) => sightIds.has(move.to)));
-  check("Detektive haben keinen Hubschrauber", !scotlandMoves(flying, flying.detectives[0]!).some((move) => move.ticket === "heli"));
-  const sight = london.sights[0]!;
-  flying.positions[flying.mrX] = sight.id;
-  flying.phase = "det";
-  flying.picker = 0;
-  flying.probed = false;
-  const asked = applyScotland(flying, flying.detectives[0]!, { type: "sy-probe", kind: "befragung" });
-  const witness = asked.probe?.kind === "befragung" ? asked.probe.witnesses.find((item) => item.id === sight.id) : null;
-  check("Befragung sieht Mr. X an der Sehenswürdigkeit", witness?.saw === "hier" && viewScotland(asked, asked.mrX).probe == null);
-  let blockedProbe = false;
+  const before = duo.tickets[duo.mrX]!.taxi;
+  const detective = duo.detectives[0]!;
+  const from = duo.positions[detective]!;
+  const hop = cityLinks("london", from, "taxi").find((id) => id !== duo.positions[duo.mrX]);
+  if (hop != null) {
+    duo.phase = "det";
+    duo.picker = 0;
+    const paid = applyScotland(duo, detective, { type: "sy-move", to: hop, ticket: "taxi" });
+    check("das Detektivticket wandert zu Mr. X", paid.tickets[detective]!.taxi === 9 && paid.tickets[paid.mrX]!.taxi === before + 1);
+  } else check("das Detektivticket wandert zu Mr. X", false);
+  let reveal = createScotland(people(2), "kurz", rng(2));
+  reveal.round = 3;
+  const show = scotlandMoves(reveal, reveal.mrX).find((move) => move.doubleTo == null && move.ticket !== "black");
+  reveal = applyScotland(reveal, reveal.mrX, { type: "sy-move", to: show!.to, ticket: show!.ticket });
+  const book = viewScotland(reveal, reveal.detectives[0]!);
+  check("Aufdeckrunde zeigt die Station", book.travel.find((row) => row.round === 3)?.station === show!.to && book.positions.find((player) => player.role === "mrx")?.station === show!.to);
+  let quiet = createScotland(people(2), "kurz", rng(3));
+  quiet.round = 2;
+  const hide = scotlandMoves(quiet, quiet.mrX).find((move) => move.doubleTo == null && move.ticket !== "black");
+  quiet = applyScotland(quiet, quiet.mrX, { type: "sy-move", to: hide!.to, ticket: hide!.ticket });
+  const secret = viewScotland(quiet, quiet.detectives[0]!);
+  check("sonst steht nur das Ticket im Fahrtenbuch", secret.travel.find((row) => row.round === 2)?.station == null && secret.travel.find((row) => row.round === 2)?.ticket === hide!.ticket);
+  let blockedSeat = false;
+  const crowd = createScotland(people(3), "kurz", () => 0);
+  const first = crowd.detectives[0]!;
+  const second = crowd.detectives[1]!;
+  crowd.phase = "det";
+  crowd.picker = 0;
+  crowd.positions[second] = cityLinks("london", crowd.positions[first]!, "taxi")[0] ?? crowd.positions[second];
   try {
-    applyScotland(asked, asked.detectives[0]!, { type: "sy-probe", kind: "ortung" });
+    applyScotland(crowd, first, { type: "sy-move", to: crowd.positions[second]!, ticket: "taxi" });
   } catch {
-    blockedProbe = true;
+    blockedSeat = true;
   }
-  check("die zweite Ermittlung wartet bis zur nächsten Runde", blockedProbe);
-  let points = createScotland(people(2), "kurz", () => 0);
-  const origin = london.opening.kurz[0]!;
-  points.positions[points.mrX] = origin;
-  points.positions[points.detectives[0]!] = london.opening.kurz[1]!;
-  const firstStop = cityLinks("london", origin, "taxi").find((id) => id !== london.opening.kurz[1])!;
-  const secondStop = cityLinks("london", firstStop, "taxi").find((id) => id !== origin)!;
-  points.meetings = [firstStop, secondStop];
-  points.round = points.maxRounds;
-  points.meetHits = [];
-  points = applyScotland(points, points.mrX, { type: "sy-move", to: firstStop, ticket: "taxi" });
-  check("ein Treffpunkt hält die Jagd offen", points.phase === "det" && points.meetHits.includes(firstStop));
-  points.phase = "mrx";
-  points = applyScotland(points, points.mrX, { type: "sy-move", to: secondStop, ticket: "taxi" });
-  check("zwei Treffpunkte gewinnen sofort", points.phase === "done" && points.winnerIds?.[0] === points.mrX);
-  const revealed = (state as ScotlandState).moves.find((move) => state.reveals.includes(move.round));
-  if (revealed && state.winnerIds?.[0] !== state.mrX) {
-    const detectiveView = viewScotland(state, state.detectives[0] ?? state.players[0]!.id);
-    const row = detectiveView.travel.find((item) => item.round === revealed.round);
-    check("Aufdeckrunde zeigt die Station", row?.station === revealed.station);
-  } else check("Aufdeckrunde ist entstanden oder Mr. X entkommt", true);
+  check("zwei Detektive stehen nicht auf derselben Station", blockedSeat);
+  let stuck = createScotland(people(2), "kurz", () => 0);
+  for (const id of stuck.detectives) stuck.tickets[id] = { taxi: 0, bus: 0, ug: 0, black: 0, double: 0, heli: 0 };
+  const escape = scotlandMoves(stuck, stuck.mrX).find((move) => move.doubleTo == null);
+  stuck = applyScotland(stuck, stuck.mrX, { type: "sy-move", to: escape!.to, ticket: escape!.ticket });
+  check("ohne fahrende Detektive gewinnt Mr. X", stuck.phase === "done" && stuck.winnerIds?.[0] === stuck.mrX);
+  let late = createScotland(people(2), "kurz", () => 0);
+  late.round = 24;
+  late.phase = "det";
+  late.picker = late.detectives.length - 1;
+  const lastPiece = late.detectives[late.picker]!;
+  const lastFrom = late.positions[lastPiece]!;
+  const lastTo = cityLinks("london", lastFrom, "taxi").find((id) => id !== late.positions[late.mrX] && !late.detectives.some((piece) => late.positions[piece] === id));
+  late = applyScotland(late, late.controls[lastPiece]!, { type: "sy-move", to: lastTo!, ticket: "taxi" });
+  check("nach Zug 24 entkommt Mr. X", late.phase === "done" && late.winnerIds?.[0] === late.mrX);
+  const shared = createScotland(people(2), "kurz", () => 0);
+  const player = shared.players.find((person) => person.id !== shared.mrX)!;
+  const spare = shared.detectives[1]!;
+  shared.phase = "det";
+  shared.picker = 1;
+  const ride = cityLinks("london", shared.positions[spare]!, "taxi").find((id) => id !== shared.positions[shared.mrX] && !shared.detectives.some((piece) => shared.positions[piece] === id));
+  const driven = applyScotland(structuredClone(shared), player.id, { type: "sy-move", to: ride!, ticket: "taxi" });
+  let refused = false;
+  try {
+    applyScotland(structuredClone(shared), shared.mrX, { type: "sy-move", to: ride!, ticket: "taxi" });
+  } catch {
+    refused = true;
+  }
+  check(
+    "freie Detektive spielt der Detektiv",
+    shared.detectives.length === 3 &&
+      shared.tickets[shared.mrX]?.black === 3 &&
+      shared.detectives.every((id) => shared.controls[id] === player.id) &&
+      driven.positions[spare] === ride &&
+      refused,
+  );
 }
 
 function playSketch() {
@@ -395,15 +419,15 @@ function playSketch() {
   check("das vierte Skip geht nicht", blocked);
 }
 
-function herz(id: string, n: number, animal: HerzCard["animal"] = "hase"): HerzCard {
-  return { id, kind: "zahl", animal, n };
+function herz(id: string, n: number, color: HerzCard["color"] = "rot"): HerzCard {
+  return { id, kind: "zahl", color, n };
 }
 
 function playLove() {
   const zehn = createZehn(people(2), "kurz", rng(8));
   check("Phase 10 hat 108 Karten", zehnCardCount(zehn) === 108);
   zehn.step = "play";
-  zehn.hands.p0 = [herz("a", 5), herz("b", 5, "baer"), herz("c", 5, "fuchs"), herz("d", 7), herz("e", 7, "eule"), herz("f", 7, "baer"), herz("g", 1)];
+  zehn.hands.p0 = [herz("a", 5), herz("b", 5, "gelb"), herz("c", 5, "gruen"), herz("d", 7), herz("e", 7, "blau"), herz("f", 7, "gelb"), herz("g", 1)];
   let laid = applyZehn(zehn, "p0", { type: "zehn-lay", groups: [["a", "b", "c"], ["d", "e", "f"]] });
   check("zwei Sätze erfüllen die erste Aufgabe", laid.down.p0 === true && laid.laid.length === 2);
   let slept = false;
@@ -414,15 +438,15 @@ function playLove() {
   }
   const sleepy = createZehn(people(2), "kurz", rng(9));
   sleepy.step = "play";
-  sleepy.hands.p0 = [{ id: "sch", kind: "schlaf", animal: null, n: null }, herz("keep", 3)];
+  sleepy.hands.p0 = [{ id: "sch", kind: "skip", color: null, n: null }, herz("keep", 3)];
   const skipped = applyZehn(sleepy, "p0", { type: "zehn-discard", id: "sch" });
-  check("Schlaf lässt die andere Person aussetzen", skipped.turn === 0 && skipped.step === "draw");
+  check("Skip lässt die andere Person aussetzen", skipped.turn === 0 && skipped.step === "draw");
   check("eine zweite Aufgabe im selben Zug geht nicht", slept);
 
   const last = createZehn(people(2), "kurz", rng(10));
   last.goal = 1;
   last.step = "play";
-  last.hands.p0 = [herz("a", 4), herz("b", 4, "fuchs"), herz("c", 4, "eule"), herz("d", 9), herz("e", 9, "baer"), herz("f", 9, "fuchs"), herz("g", 2)];
+  last.hands.p0 = [herz("a", 4), herz("b", 4, "gruen"), herz("c", 4, "blau"), herz("d", 9), herz("e", 9, "gelb"), herz("f", 9, "gruen"), herz("g", 2)];
   let gone = applyZehn(last, "p0", { type: "zehn-lay", groups: [["a", "b", "c"], ["d", "e", "f"]] });
   gone = applyZehn(gone, "p0", { type: "zehn-discard", id: "g" });
   check("die letzte Aufgabe und leere Hand gewinnen", gone.phase === "done" && gone.winnerIds?.[0] === "p0");
@@ -431,7 +455,7 @@ function playLove() {
   kiss.hands.p0 = [{ id: "kuss", n: null, wild: true }, { id: "drei", n: 3 }, { id: "eins", n: 1 }, { id: "zwei", n: 2 }];
   kiss.piles = [[], [], [], []];
   let built = applyStapel(kiss, "p0", { type: "stapel-play", from: "hand", id: "kuss", pile: 0 });
-  check("der Kuss wird zur Eins", built.piles[0]?.[0]?.n === 1);
+  check("Skip-Bo wird zur Eins", built.piles[0]?.[0]?.n === 1);
   let refused = false;
   try {
     applyStapel(built, "p0", { type: "stapel-play", from: "hand", id: "drei", pile: 1 });
@@ -445,14 +469,17 @@ function playLove() {
   stockWin.stock.p0 = [{ id: "last", n: 1 }];
   stockWin.piles = [[], [], [], []];
   const won = applyStapel(stockWin, "p0", { type: "stapel-play", from: "stock", pile: 0 });
-  check("der leere Liebesstapel gewinnt", won.phase === "done" && won.winnerIds?.[0] === "p0");
+  check("der leere Vorrat gewinnt", won.phase === "done" && won.winnerIds?.[0] === "p0");
+  check("der Vorrat hat 10, 20 oder 30 Karten", createStapel(people(2), "kurz", rng(18), 10).stock.p0?.length === 10 && createStapel(people(2), "kurz", rng(18), 20).stock.p0?.length === 20 && createStapel(people(2), "kurz", rng(18), 30).stock.p0?.length === 30);
   const pass = createStapel(people(2), "kurz", rng(13));
   const card = pass.hands.p0?.[0];
   const handed = applyStapel(pass, "p0", { type: "stapel-end", id: card?.id, slot: 0 });
   check("Ablegen gibt weiter und füllt die nächste Hand", handed.turn === 1 && (handed.hands.p1?.length ?? 0) === 5);
+  const shown = viewStapel(handed, "p1").others.find((player) => player.id === "p0")?.bins[0];
+  check("die Ablage nennt Anzahl und Karten", shown?.count === 1 && shown.cards.length === 1 && shown.cards[0]?.n === card?.n);
 
-  const memo = createMemo(people(2), "kurz", rng(14));
-  check("Memo hat acht Paare", memo.tiles.length === 16);
+  const memo = createMemo(people(2), 6, rng(14));
+  check("Memo kennt drei Felder", memo.tiles.length === 12 && createMemo(people(2), 10).tiles.length === 20 && createMemo(people(2), 15).tiles.length === 30);
   const first = memo.tiles.findIndex((tile) => tile.animal === memo.tiles[0]?.animal);
   const second = memo.tiles.findIndex((tile, index) => index !== first && tile.animal === memo.tiles[first]?.animal);
   let found = applyMemo(memo, "p0", { type: "memo-flip", index: first });
@@ -484,53 +511,242 @@ function playLove() {
     blocked = true;
   }
   check("eine volle Spalte nimmt kein Herz mehr", blocked);
+  check("der letzte Stein bleibt gemerkt", vier.last === 21);
+  const klein = createVier(people(4), "klein");
+  const gross = createVier(people(4), "gross");
+  check("drei Feldgrößen", klein.cells.length === 30 && createVier(people(2)).cells.length === 42 && gross.cells.length === 63 && gross.players.length === 4);
+}
 
-  const mau = createMau(people(2), "kurz", rng(15));
-  check("MAU MAU hat 32 Karten", mauCardCount(mau) === 32);
-  mau.top = { id: "top", animal: "hase", rank: "9" };
-  mau.animal = "hase";
-  mau.pending = 0;
-  mau.phase = "play";
-  mau.turn = 0;
-  mau.hands.p0 = [
-    { id: "passend", animal: "fuchs", rank: "9" },
-    { id: "bube", animal: "baer", rank: "B" },
-    { id: "sieben", animal: "hase", rank: "7" },
-    { id: "fremd", animal: "eule", rank: "8" },
+function playBot() {
+  const human = { id: "human", name: "du" };
+  const bot = { id: BOT_ID, name: BOT_NAME };
+  const sea = settleBot(createSchiffe([human, bot], "kurz", () => 0));
+  check("honeybot legt die Flotte", sea.kind === "schiffe" && sea.ready[BOT_ID] === true && sea.ready.human !== true);
+  const answered = settleBot(applyVier(createVier([human, bot]), human.id, { type: "vier-drop", col: 3 }));
+  check("honeybot setzt ein Herz", answered.kind === "vier" && answered.cells.some((cell) => cell === 1));
+  const quiet = createScotland([bot, human], "kurz", () => 0);
+  const moved = settleBot(quiet);
+  check("honeybot zieht als Mr. X", moved.kind === "scotland" && moved.positions[BOT_ID] !== quiet.positions[BOT_ID]);
+  const memo = settleBot(createMemo([bot, human], 6, () => 0));
+  check("honeybot deckt Memo auf", memo.kind === "memo" && memo.tiles.some((tile) => tile.up || tile.owner != null));
+  const opened = createRisko([bot, human], "kurz", rng(8));
+  const risko = settleBot(opened);
+  check("honeybot setzt in Risko", risko.kind === "risko" && risko.turn === 1 && risko.pool[0] === 0 && opened.pool[0]! > 0);
+}
+
+function armiesOf(state: RiskoState) {
+  return Object.values(state.lands).reduce((sum, land) => sum + land.armies, 0) + state.pool.reduce((sum, n) => sum + n, 0);
+}
+
+function stageAttack(players: ReturnType<typeof people>, from: string, to: string, seed: number, own: string[]) {
+  const round = createRisko(players, "voll", rng(1));
+  round.phase = "attack";
+  round.turn = 0;
+  round.pool = players.map(() => 0);
+  round.seed = seed;
+  for (const land of Object.values(round.lands)) {
+    land.owner = players.length - 1;
+    land.armies = 1;
+  }
+  for (const id of own) round.lands[id] = { owner: 0, armies: 1 };
+  round.lands[from] = { owner: 0, armies: 8 };
+  round.lands[to] = { owner: 1, armies: 1 };
+  return round;
+}
+
+function playRisko() {
+  const made = createRisko(people(2), "kurz", rng(3));
+  const counts = Object.fromEntries(RISKO_REALMS.map((realm) => [realm.id, RISKO_LANDS.filter((land) => land.realm === realm.id).length]));
+  const symbols = { inf: 0, kav: 0, art: 0 };
+  for (const land of RISKO_LANDS) if (land.symbol !== "joker") symbols[land.symbol] += 1;
+  check(
+    "Risko hat 42 Gebiete und sechs Kontinente",
+    RISKO_LANDS.length === 42 &&
+      counts.nordamerika === 9 &&
+      counts.suedamerika === 4 &&
+      counts.europa === 7 &&
+      counts.afrika === 6 &&
+      counts.asien === 12 &&
+      counts.australien === 4 &&
+      RISKO_REALMS.map((realm) => realm.bonus).join() === "5,2,5,3,7,2" &&
+      symbols.inf === 14 &&
+      symbols.kav === 14 &&
+      symbols.art === 14,
+  );
+  const seas = [
+    ["alaska", "kamtschatka"],
+    ["groenland", "island"],
+    ["brasilien", "nordafrika"],
+    ["westeuropa", "nordafrika"],
+    ["suedeuropa", "aegypten"],
+    ["suedeuropa", "mittlererosten"],
+    ["ostafrika", "mittlererosten"],
+    ["siam", "indonesien"],
   ];
-  check("gleiche Karte passt, fremdes Tier nicht", mauFits(mau.hands.p0[0]!, mau.top, mau.animal, 0) && !mauFits(mau.hands.p0[3]!, mau.top, mau.animal, 0));
-  let round = applyMau(mau, "p0", { type: "mau-play", id: "sieben" });
-  check("die Sieben lässt zwei ziehen", round.pending === 2 && round.turn === 1);
-  round.hands.p1 = [{ id: "noch", animal: "hase", rank: "7" }, { id: "ruhe", animal: "hase", rank: "10" }];
-  round = applyMau(round, "p1", { type: "mau-play", id: "noch" });
-  check("eine zweite Sieben stapelt", round.pending === 4);
-  const bube = createMau(people(2), "kurz", rng(16));
-  bube.top = { id: "top", animal: "hase", rank: "9" };
-  bube.animal = "hase";
-  bube.pending = 0;
-  bube.turn = 0;
-  bube.phase = "play";
-  bube.hands.p0 = [{ id: "bube", animal: "baer", rank: "B" }, { id: "rest", animal: "hase", rank: "8" }];
-  const chosen = applyMau(bube, "p0", { type: "mau-play", id: "bube", animal: "eule" });
-  check("der Bube sucht das Tier aus", chosen.animal === "eule");
-  const out = createMau(people(2), "kurz", rng(17));
-  out.top = { id: "top", animal: "baer", rank: "10" };
-  out.animal = "baer";
-  out.pending = 0;
-  out.turn = 0;
-  out.phase = "play";
-  out.hands.p0 = [{ id: "letzte", animal: "baer", rank: "K" }];
-  const empty = applyMau(out, "p0", { type: "mau-play", id: "letzte" });
-  check("die letzte Karte gewinnt MAU MAU", empty.phase === "done" && empty.winnerIds?.[0] === "p0");
+  check(
+    "Seewege verbinden die Übersee-Nachbarn",
+    RISKO_SEA.length === 9 && seas.every(([a, b]) => riskoNeighbors(a!).includes(b!)) && RISKO_SEA.every((route) => riskoNeighbors(route.a).includes(route.b)) && riskoNeighbors("mittelamerika").includes("venezuela"),
+  );
+  check(
+    "die Startarmeen folgen der Personenzahl",
+    armiesOf(made) === 80 &&
+      made.mode === "auftrag" &&
+      armiesOf(createRisko(people(3), "voll", rng(3))) === 105 &&
+      armiesOf(createRisko(people(4), "voll", rng(3))) === 120 &&
+      armiesOf(createRisko(people(5), "voll", rng(3))) === 125 &&
+      armiesOf(createRisko(people(6), "kurz", rng(3))) === 120 &&
+      createRisko(people(2), "voll", rng(3)).mode === "welt" &&
+      made.deck.length === 44 &&
+      RISKO_MISSIONS.length === 14 &&
+      tradeValue(0) === 4 &&
+      tradeValue(5) === 15 &&
+      tradeValue(6) === 20,
+  );
+  check("ein Satz ist drei gleiche oder je eines", riskoIsSet(["inf", "inf", "inf"]) && riskoIsSet(["inf", "kav", "joker"]) && !riskoIsSet(["inf", "inf", "kav"]));
+  const own = Object.entries(made.lands).find(([, land]) => land.owner === 0)![0];
+  const placed = applyRisko(structuredClone(made), "p0", { type: "risko-place", id: own });
+  check("setzen nimmt eine Armee aus dem Vorrat", placed.lands[own]!.armies === made.lands[own]!.armies + 1 && placed.pool[0] === made.pool[0]! - 1);
+  let refused = false;
+  try {
+    const enemy = Object.entries(made.lands).find(([, land]) => land.owner === 1)![0];
+    applyRisko(structuredClone(made), "p0", { type: "risko-place", id: enemy });
+  } catch {
+    refused = true;
+  }
+  check("fremde Gebiete nehmen nichts an", refused);
+
+  let tied = false;
+  for (let seed = 1; seed < 80 && !tied; seed++) {
+    const round = stageAttack(people(2), "alaska", "kamtschatka", seed, ["alaska"]);
+    round.lands.alaska = { owner: 0, armies: 2 };
+    const next = applyRisko(structuredClone(round), "p0", { type: "risko-attack", from: "alaska", to: "kamtschatka", dice: 1 });
+    tied = next.last?.attack[0] === next.last?.defend[0] && next.lands.kamtschatka!.owner === 1 && next.lands.alaska!.armies === 1;
+  }
+  check("bei Gleichstand hält die Verteidigung", tied);
+
+  let taken: RiskoState | null = null;
+  for (let seed = 1; seed < 80 && !taken; seed++) {
+    const next = applyRisko(stageAttack(people(2), "alaska", "nordwest", seed, ["alaska"]), "p0", { type: "risko-attack", from: "alaska", to: "nordwest", dice: 1 });
+    if (next.phase === "occupy" && next.occupy?.min === 1 && next.last?.attack.length === 1 && next.last.defend.length === 1) taken = next;
+  }
+  check("eine Eroberung verlangt das Nachziehen", taken != null && taken.lands.nordwest!.armies === 0);
+  const occupied = taken ? applyRisko(taken, "p0", { type: "risko-occupy", n: taken.occupy!.min }) : taken;
+  check("nachgezogen wird mindestens die Würfelzahl", occupied?.lands.alaska!.armies === 7 && occupied.lands.nordwest!.armies === 1 && occupied.phase === "attack");
+
+  const south = createRisko(people(2), "voll", rng(2));
+  south.phase = "fortify";
+  south.turn = 1;
+  south.pool = [0, 0];
+  for (const land of Object.values(south.lands)) land.owner = 1;
+  for (const id of ["venezuela", "peru", "brasilien", "argentinien"]) south.lands[id] = { owner: 0, armies: 1 };
+  const income = applyRisko(south, "p1", { type: "risko-end" });
+  check("Südamerika gibt zwei Extraarmeen", income.turn === 0 && income.pool[0] === 5 && income.phase === "place");
+
+  const cards = made.deck.filter((card) => card.symbol === "inf").slice(0, 3);
+  const trade = structuredClone(made);
+  trade.phase = "place";
+  trade.turn = 0;
+  trade.pool = [0, 0];
+  trade.hands[0] = cards;
+  const bonus = cards[0]!.land!;
+  for (const card of cards) {
+    if (card.land) trade.lands[card.land] = { owner: card.land === bonus ? 0 : 1, armies: 1 };
+  }
+  const cashed = applyRisko(trade, "p0", { type: "risko-trade", ids: cards.map((card) => card.id) });
+  check("der erste Tausch bringt 4 und 2 auf dem eigenen Gebiet", cashed.pool[0] === 4 && cashed.lands[bonus]!.armies === 3 && cashed.trades === 1 && cashed.hands[0]!.length === 0);
+
+  let blocked = false;
+  try {
+    const full = structuredClone(made);
+    full.phase = "place";
+    full.hands[0] = made.deck.slice(0, 5);
+    applyRisko(full, "p0", { type: "risko-place", id: own });
+  } catch {
+    blocked = true;
+  }
+  check("fünf Karten erzwingen den Tausch", blocked);
+
+  const shift = createRisko(people(2), "kurz", rng(1));
+  shift.phase = "fortify";
+  shift.turn = 0;
+  shift.pool = [0, 0];
+  for (const land of Object.values(shift.lands)) land.owner = 1;
+  shift.lands.alaska = { owner: 0, armies: 6 };
+  shift.lands.nordwest = { owner: 0, armies: 1 };
+  const moved = applyRisko(shift, "p0", { type: "risko-fortify", from: "alaska", to: "nordwest", n: 2 });
+  check("verschieben lässt eine Armee zurück", moved.lands.alaska!.armies === 4 && moved.lands.nordwest!.armies === 3 && moved.turn === 1);
+  let apart = false;
+  try {
+    const split = structuredClone(shift);
+    split.phase = "fortify";
+    split.turn = 0;
+    split.lands.brasilien = { owner: 0, armies: 1 };
+    applyRisko(split, "p0", { type: "risko-fortify", from: "alaska", to: "brasilien" });
+  } catch {
+    apart = true;
+  }
+  check("getrennte Gebiete schieben nichts", apart);
+
+  let mission: RiskoState | null = null;
+  const owned = RISKO_LANDS.map((land) => land.id).filter((id) => id !== "kamtschatka").slice(0, 23);
+  for (let seed = 1; seed < 80 && !mission; seed++) {
+    const round = stageAttack(people(2), "alaska", "kamtschatka", seed, owned);
+    round.mode = "auftrag";
+    round.missions[0] = "lands-24";
+    const next = applyRisko(round, "p0", { type: "risko-attack", from: "alaska", to: "kamtschatka" });
+    if (next.lands.kamtschatka!.owner !== 0) continue;
+    mission = next.phase === "occupy" ? applyRisko(next, "p0", { type: "risko-occupy", n: next.occupy!.min }) : next;
+  }
+  check("24 Gebiete erfüllen den Auftrag", mission?.phase === "done" && mission.winnerIds?.[0] === "p0");
+
+  let passed = false;
+  const world = createRisko(people(2), "voll", rng(4));
+  world.phase = "fortify";
+  world.turn = 0;
+  world.mode = "welt";
+  for (const land of Object.values(world.lands)) land.owner = 1;
+  for (const id of owned) world.lands[id] = { owner: 0, armies: 1 };
+  const still = applyRisko(world, "p0", { type: "risko-end" });
+  passed = still.phase !== "done";
+  check("Welteroberung endet nicht bei 24 Gebieten", passed);
+
+  const crowd = stageAttack(people(3), "alaska", "kamtschatka", 1, ["alaska"]);
+  crowd.mode = "auftrag";
+  crowd.missions = ["lands-18", "lands-24", "wipe-1"];
+  let swapped: RiskoState | null = null;
+  for (let seed = 1; seed < 80 && !swapped; seed++) {
+    const round = structuredClone(crowd);
+    round.seed = seed;
+    const next = applyRisko(round, "p0", { type: "risko-attack", from: "alaska", to: "kamtschatka" });
+    if (next.lands.kamtschatka!.owner === 0) swapped = next;
+  }
+  check("eine fremde Vernichtung wird zu 24 Gebieten", swapped?.missions[2] === "lands-24" && swapped.phase === "occupy" && swapped.hands[0]!.length === 0);
+
+  let card: RiskoState | null = null;
+  if (occupied && occupied.phase === "attack") {
+    occupied.lands.alaska!.armies = 8;
+    for (let seed = 1; seed < 80 && !card; seed++) {
+      const round = structuredClone(occupied);
+      round.seed = seed;
+      round.lands.alberta = { owner: 1, armies: 1 };
+      const next = applyRisko(round, "p0", { type: "risko-attack", from: "alaska", to: "alberta" });
+      if (next.lands.alberta!.owner !== 0 || next.phase !== "occupy") continue;
+      const held = applyRisko(next, "p0", { type: "risko-occupy", n: next.occupy!.min });
+      card = applyRisko(held, "p0", { type: "risko-halt" });
+    }
+  }
+  check("ein Zug bringt höchstens eine Karte", card?.hands[0]?.length === 1 && card.deck.length === 43);
 }
 
 wizardCards();
+playBot();
 playWizard();
 playSchiffe();
 playUno();
 playScotland();
 playSketch();
 playLove();
+playRisko();
 
 if (failed > 0) {
   console.error(`${failed} tests failed`);

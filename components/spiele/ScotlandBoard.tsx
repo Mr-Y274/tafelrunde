@@ -1,8 +1,8 @@
 "use client";
 
-import { cityMap, citySegments, cityStation, type CityId } from "@/lib/games/city-maps";
-import type { CityStation } from "@/lib/games/city-data";
-import type { Ride, ScotlandMove, ScotlandProbe, ScotlandView } from "@/lib/games/types";
+import { cityLinks, cityMap, citySegments, cityStation, type CityId } from "@/lib/games/city-maps";
+import type { CityEdge, CityStation } from "@/lib/games/city-data";
+import type { Ride, ScotlandMove, ScotlandView } from "@/lib/games/types";
 import { useEffect, useRef, useState } from "react";
 import { Note } from "../Note";
 
@@ -16,48 +16,70 @@ function ticketWord(ticket: Ride) {
   return "Schwarz";
 }
 
-function bandColor(band: "nah" | "mittel" | "fern" | undefined) {
-  if (band === "nah") return "#3cbfa8";
-  if (band === "mittel") return "#e2b43a";
-  return "#d4532b";
-}
-
-function probeText(probe: ScotlandProbe) {
-  if (probe.kind === "analyse") return `${probe.stations.length} mögliche Stationen. Sie sind auf der Karte hell umrandet.`;
-  if (probe.kind === "ortung") return probe.masts.map((mast) => `${mast.name} ${mast.band}`).join(" · ");
-  if (probe.kind === "abtasten") return `Ein Funkmast ist ${probe.steps} Taxischritte entfernt. Welcher, bleibt offen.`;
-  return probe.witnesses.map((witness) => `${witness.name}: ${witness.saw === "still" ? "nichts gesehen" : witness.saw === "hier" ? "er ist hier" : "vor kurzem da"}`).join(" · ");
-}
+const INK = "#241c14";
+const TAXI = "#e2a000";
+const BUS = "#1f8a4c";
+const UG = "#d0121c";
 
 function lineColor(mode: string) {
-  if (mode === "ug") return "#d4532b";
-  if (mode === "bus") return "#3cbfa8";
-  if (mode === "water") return "#8ecae6";
-  return "rgba(226,180,58,.8)";
+  if (mode === "ug") return UG;
+  if (mode === "bus") return BUS;
+  if (mode === "water") return INK;
+  return TAXI;
 }
 
-function stationStroke(modes: CityStation["modes"]) {
-  if (modes.includes("ug")) return "#d4532b";
-  if (modes.includes("bus")) return "#3cbfa8";
-  return "#e2b43a";
+function shift(pts: number[], dist: number) {
+  const count = pts.length / 2;
+  const moved: number[] = [];
+  for (let i = 0; i < count; i++) {
+    const prev = Math.max(0, i - 1);
+    const next = Math.min(count - 1, i + 1);
+    const dx = (pts[next * 2] ?? 0) - (pts[prev * 2] ?? 0);
+    const dy = (pts[next * 2 + 1] ?? 0) - (pts[prev * 2 + 1] ?? 0);
+    const len = Math.hypot(dx, dy) || 1;
+    moved.push((pts[i * 2] ?? 0) + (-dy / len) * dist, (pts[i * 2 + 1] ?? 0) + (dx / len) * dist);
+  }
+  return moved;
 }
 
-function shift(city: CityId, a: number, b: number, mode: string) {
-  const from = cityStation(city, a);
-  const to = cityStation(city, b);
+function track(city: CityId, segment: CityEdge) {
+  const from = cityStation(city, segment.a);
+  const to = cityStation(city, segment.b);
   if (!from || !to) return null;
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const len = Math.hypot(dx, dy) || 1;
-  const amount = mode === "bus" ? 3 : mode === "ug" ? -3 : mode === "water" ? 6 : 0;
-  const ox = (-dy / len) * amount;
-  const oy = (dx / len) * amount;
-  return { x1: from.x + ox, y1: from.y + oy, x2: to.x + ox, y2: to.y + oy };
+  const pts = [from.x, from.y];
+  const via = segment.via ?? [];
+  for (let i = 0; i < via.length; i += 2) pts.push(via[i] ?? from.x, via[i + 1] ?? from.y);
+  pts.push(to.x, to.y);
+  return pts;
+}
+
+function fareWord(city: CityId, to: number, ticket: Ride, from: number | null | undefined) {
+  if (ticket === "black" && from != null && cityLinks(city, from, "water").includes(to)) return "Fähre";
+  return ticketWord(ticket);
+}
+
+function StationMark({ x, y, id, modes }: { x: number; y: number; id: number; modes: CityStation["modes"] }) {
+  const radius = 12;
+  const bus = modes.includes("bus");
+  const ug = modes.includes("ug");
+  return (
+    <g>
+      <circle cx={x} cy={y} r={radius + 1.2} fill={INK} />
+      <circle cx={x} cy={y} r={radius} fill={TAXI} />
+      {bus ? <path d={`M ${x} ${y - radius} A ${radius} ${radius} 0 0 0 ${x} ${y + radius} Z`} fill={BUS} /> : null}
+      {ug ? <rect x={x - 7} y={y - 6} width={14} height={12} rx={1.5} fill={UG} /> : null}
+      <circle cx={x} cy={y} r={radius} fill="none" stroke={INK} strokeWidth={1.4} />
+      <text x={x} y={y + 3} textAnchor="middle" fontSize={id > 99 ? 8 : 10} fontWeight={700} fill={ug ? "#fffaf3" : INK} fontFamily="var(--font-outfit), sans-serif">
+        {id}
+      </text>
+    </g>
+  );
 }
 
 export function ScotlandBoard({ view, busy, onAction }: { view: ScotlandView; busy: boolean; onAction: (body: Record<string, unknown>) => Promise<void> }) {
   const [startAt, setStartAt] = useState<number | null>(null);
   const [near, setNear] = useState(true);
+  const [legend, setLegend] = useState(true);
   const [double, setDouble] = useState(false);
   const frame = useRef<HTMLDivElement>(null);
   const [first, setFirst] = useState<{ to: number; ticket: Ride } | null>(null);
@@ -71,7 +93,6 @@ export function ScotlandBoard({ view, busy, onAction }: { view: ScotlandView; bu
   }, [view.turnId, view.round, view.phase]);
 
   const map = cityMap(view.city);
-  const starts = new Set(map.starts);
 
   useEffect(() => {
     if (!near || view.home == null) return;
@@ -130,7 +151,7 @@ export function ScotlandBoard({ view, busy, onAction }: { view: ScotlandView; bu
   }
 
   return (
-    <section className="rounded-[1.4rem] bg-[#141a22] p-4 text-paper md:p-6">
+    <section className="max-w-full min-w-0 rounded-[1.4rem] bg-[#141a22] p-3 text-paper sm:p-4 md:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <p className="kicker">
           Runde {view.round} / {view.maxRounds}
@@ -138,72 +159,84 @@ export function ScotlandBoard({ view, busy, onAction }: { view: ScotlandView; bu
         </p>
         <p className="text-sm">
           Taxi {view.tickets.taxi} · Bus {view.tickets.bus} · U-Bahn {view.tickets.ug}
-          {view.youAreMrX ? ` · Schwarz ${view.tickets.black} · Doppelt ${view.tickets.double} · Hubschrauber ${view.tickets.heli}` : ""}
+          {view.youAreMrX ? ` · Schwarz ${view.tickets.black} · Doppelt ${view.tickets.double}` : ""}
         </p>
       </div>
       <p className="mt-2 text-sm">
         {view.youAreMrX
-          ? `Treffpunkte: ${view.meetings?.map((meet) => `${meet.station}${meet.hit ? " geschafft" : ""}`).join(", ") || "noch keine"}`
-          : `Mr. X hat noch Schwarz ${view.specials.black}, Doppelt ${view.specials.double}, Hubschrauber ${view.specials.heli}. Treffpunkte ${view.meetHits}.`}
+          ? "Die Detektive sehen nur dein Ticket, außer in den Runden 3, 8, 13, 18 und 24."
+          : `Mr. X hat noch Schwarz ${view.specials.black} und Doppelt ${view.specials.double}. Zuletzt gesehen: ${view.lastSeen ? `Runde ${view.lastSeen.round}, Station ${view.lastSeen.station}` : "noch nicht"}.`}
       </p>
       <div className="mt-3">
         <Note banner={view.banner} log={view.log} />
       </div>
       <div className="mt-4 flex items-center justify-between gap-3">
-        <p className="text-xs text-paper/60">
-          {view.home != null ? `Du stehst auf ${view.home}. ` : ""}
-          {map.name} liegt als Bild hinter dem Netz. {near ? "Die Karte lässt sich schieben." : "Näher holt dein Feld groß."}
+        <p className="min-w-0 text-xs text-paper/60">
+          {view.youAreUp && view.turnId ? `${view.positions.find((player) => player.id === view.turnId)?.name ?? "Du"} ist dran. ` : ""}
+          {view.home != null ? `Die Figur steht auf ${view.home}. ` : ""}
+          Gelb ist Taxi, Türkis der Bus, Rot die U-Bahn, Schwarz die Fähre. {near ? "Die Karte lässt sich schieben." : "Näher holt dein Feld groß."}
         </p>
-        <button className="btn btn-line" onClick={() => setNear((value) => !value)}>
-          {near ? "Ganze Karte" : "Näher"}
-        </button>
+        <div className="flex shrink-0 gap-2">
+          <button className="btn btn-line" onClick={() => setLegend((value) => !value)} type="button">
+            {legend ? "Legende zu" : "Legende"}
+          </button>
+          <button className="btn btn-line" onClick={() => setNear((value) => !value)} type="button">
+            {near ? "Ganze Karte" : "Näher"}
+          </button>
+        </div>
       </div>
-      <div ref={frame} className={`mt-2 rounded-2xl bg-[#0c1418] ${near ? "max-h-[72vh] overflow-auto" : "overflow-x-auto"}`}>
-      <svg viewBox={`0 0 ${map.width} ${map.height}`} className={near ? "h-auto w-[2000px] max-w-none" : "h-auto min-w-[920px] w-full"} role="img" aria-label={`${map.name}, das Bild hinter dem Netz`}>
-        <image href={map.image} x="0" y="0" width={map.width} height={map.height} />
-        {citySegments(view.city).map((segment) => {
-          const line = shift(view.city, segment.a, segment.b, segment.mode);
-          if (!line) return null;
-          const width = segment.mode === "ug" ? 5 : segment.mode === "water" ? 6 : segment.mode === "bus" ? 3.4 : 2.4;
-          const key = `${segment.mode}-${segment.a}-${segment.b}`;
+      <div className="mt-2 max-w-full min-w-0 rounded-2xl bg-[#8d6940] p-1.5 sm:p-2">
+      <div ref={frame} className={`max-w-full min-w-0 overscroll-contain bg-[#f4e8d0] ${near ? "max-h-[62dvh] touch-pan-x touch-pan-y overflow-auto sm:max-h-[72vh]" : "overflow-x-auto"}`}>
+      <svg viewBox={`0 0 ${map.width} ${map.height}`} className={near ? "h-auto w-[1560px] max-w-none sm:w-[2000px]" : "h-auto w-full"} role="img" aria-label={`${map.name}, das Spielbrett`}>
+        <rect width={map.width} height={map.height} fill="#e4d3ae" />
+        {map.parks.map((park) => (
+          <ellipse key={park.name} cx={park.x} cy={park.y} rx={park.rx} ry={park.ry} fill="#b7d39a" opacity="0.85" />
+        ))}
+        {map.river.length > 1 ? (
+          <polyline points={map.river.map((point) => `${point.x},${point.y}`).join(" ")} fill="none" stroke="#8ec4e6" strokeWidth="70" strokeLinecap="round" strokeLinejoin="round" />
+        ) : null}
+        {map.labels.map((label) => (
+          <text key={label.name} x={label.x} y={label.y} fill="#6d5a40" fontSize="28" fontFamily="var(--font-fraunces), Georgia, serif">
+            {label.name}
+          </text>
+        ))}
+        {map.image ? <image href={map.image} x="0" y="0" width={map.width} height={map.height} opacity="0.28" /> : null}
+        {citySegments(view.city)
+          .slice()
+          .sort((a, b) => (a.mode === "water" || a.mode === "ug" ? 1 : 0) - (b.mode === "water" || b.mode === "ug" ? 1 : 0))
+          .map((segment) => {
+          const pts = track(view.city, segment);
+          if (!pts) return null;
+          const drawn = segment.mode === "bus" ? shift(pts, 6) : pts;
+          const width = segment.mode === "ug" || segment.mode === "water" ? 6 : 5;
+          const dash = segment.mode === "ug" || segment.mode === "water" ? "16 11" : undefined;
+          const points = drawn.join(" ");
           return (
-            <g key={key}>
-              <line {...line} stroke="#0c1418" strokeWidth={width + 4} strokeLinecap="round" />
-              <line {...line} stroke={lineColor(segment.mode)} strokeWidth={width} strokeLinecap="round" />
+            <g key={`${segment.mode}-${segment.a}-${segment.b}`}>
+              <polyline points={points} fill="none" stroke={INK} strokeWidth={width + 2.4} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={dash} />
+              <polyline points={points} fill="none" stroke={lineColor(segment.mode)} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={dash} />
             </g>
           );
         })}
-        {view.masts.map((mast) => {
-          const spot = cityStation(view.city, mast.id);
-          if (!spot) return null;
-          const found = view.probe?.kind === "ortung" ? view.probe.masts.find((item) => item.id === mast.id) : undefined;
-          return <circle key={`mast-${mast.name}`} cx={spot.x} cy={spot.y} r="24" fill="none" stroke={found ? bandColor(found.band) : "#e2b43a"} strokeDasharray="4 3" strokeWidth="2" pointerEvents="none" />;
-        })}
-        {view.probe?.kind === "analyse"
-          ? view.probe.stations.map((id) => {
-              const spot = cityStation(view.city, id);
-              if (!spot) return null;
-              return <circle key={`maybe-${id}`} cx={spot.x} cy={spot.y} r="20" fill="none" stroke="#f3eadc" strokeWidth="1.4" pointerEvents="none" />;
-            })
-          : null}
-        {view.meetings?.map((meet) => {
-          const spot = cityStation(view.city, meet.station);
-          if (!spot) return null;
-          return <circle key={`meet-${meet.station}`} cx={spot.x} cy={spot.y} r="20" fill="none" stroke={meet.hit ? "#3cbfa8" : "#e2b43a"} strokeWidth="2.4" pointerEvents="none" />;
-        })}
+        {map.radios.map((radio) => (
+          <g key={radio.name} pointerEvents="none">
+            <rect x={radio.x - 78} y={radio.y - 16} width="156" height="32" rx="8" fill="#f6edd8" stroke={INK} strokeWidth="1.4" />
+            <text x={radio.x} y={radio.y + 5} textAnchor="middle" fontSize="14" fill={INK} fontFamily="var(--font-outfit), sans-serif">
+              Radio {radio.name}
+            </text>
+          </g>
+        ))}
         {view.lastSeen && mr?.station == null && cityStation(view.city, view.lastSeen.station) ? (
-          <circle cx={cityStation(view.city, view.lastSeen.station)?.x} cy={cityStation(view.city, view.lastSeen.station)?.y} r="18" fill="none" stroke="#f3eadc" strokeDasharray="3 3" />
+          <circle cx={cityStation(view.city, view.lastSeen.station)?.x} cy={cityStation(view.city, view.lastSeen.station)?.y} r="22" fill="none" stroke={INK} strokeDasharray="2 3" />
         ) : null}
         {map.stations.map((spot) => {
           const open = hot.has(spot.id);
           return (
             <g key={spot.id} onClick={() => clickStation(spot.id)} className={open || view.choices ? "cursor-pointer" : undefined} opacity={!view.choices || open ? 1 : 0.45}>
-              <circle cx={spot.x} cy={spot.y} r="40" fill="transparent" />
-              {starts.has(spot.id) ? <circle cx={spot.x} cy={spot.y} r="22" fill="none" stroke="#f3eadc" strokeWidth="2" /> : null}
-              <circle cx={spot.x} cy={spot.y} r="15" fill={open ? "#f3eadc" : "#141a22"} stroke={stationStroke(spot.modes)} strokeWidth="3" />
-              <text x={spot.x} y={spot.y + 4} textAnchor="middle" fontSize="12" fill={open ? "#16130f" : "#f3eadc"} stroke={open ? "#f3eadc" : "#141a22"} strokeWidth="3" paintOrder="stroke">
-                {spot.id}
-              </text>
+              <circle cx={spot.x} cy={spot.y} r="18" fill="transparent" />
+              {open ? <circle cx={spot.x} cy={spot.y} r="16" fill="none" stroke="#fffaf3" strokeWidth="3" /> : null}
+              {open ? <circle cx={spot.x} cy={spot.y} r="16" fill="none" stroke={INK} strokeWidth="1.2" /> : null}
+              <StationMark x={spot.x} y={spot.y} id={spot.id} modes={spot.modes} />
               <title>{`Station ${spot.id}`}</title>
             </g>
           );
@@ -211,36 +244,29 @@ export function ScotlandBoard({ view, busy, onAction }: { view: ScotlandView; bu
         {detectives.map((player, index) => {
           const spot = player.station ? cityStation(view.city, player.station) : null;
           if (!spot) return null;
-          return <circle key={player.id} cx={spot.x + 11} cy={spot.y - 11} r="5" fill={COLORS[index % COLORS.length]} pointerEvents="none" />;
-        })}
-        {view.sights.map((sight) => {
-          const spot = cityStation(view.city, sight.id);
-          if (!spot) return null;
-          const width = Math.max(64, sight.name.length * 6.6 + 16);
-          const above = spot.y > 56;
-          const top = above ? spot.y - 48 : spot.y + 24;
+          const angle = -0.9 + index * 0.7;
           return (
-            <g key={`sight-${sight.id}`} pointerEvents="none">
-              <rect x={spot.x - width / 2} y={top} width={width} height={18} rx="6" fill="#141a22" opacity="0.9" />
-              <text x={spot.x} y={top + 13} textAnchor="middle" fontSize="11" fill="#f3eadc">
-                {sight.name}
-              </text>
+            <g key={player.id} className="glide" style={{ transform: `translate(${spot.x + Math.cos(angle) * 14}px, ${spot.y + Math.sin(angle) * 14}px)` }}>
+              <circle r="7" fill={COLORS[index % COLORS.length]} stroke={player.id === view.turnId ? "#fffaf3" : INK} strokeWidth={player.id === view.turnId ? 3 : 1.4} pointerEvents="none" />
             </g>
           );
         })}
         {mr?.station && cityStation(view.city, mr.station) ? (
-          <circle cx={cityStation(view.city, mr.station)?.x} cy={(cityStation(view.city, mr.station)?.y ?? 0) + 18} r="6" fill="#16130f" stroke="#f3eadc" strokeWidth="2" pointerEvents="none" />
+          <g className="glide" style={{ transform: `translate(${cityStation(view.city, mr.station)?.x ?? 0}px, ${(cityStation(view.city, mr.station)?.y ?? 0) + 20}px)` }}>
+            <circle r="7" fill={INK} stroke="#f6edd8" strokeWidth="2" pointerEvents="none" />
+          </g>
         ) : null}
       </svg>
       </div>
-      <div className="mt-3 flex flex-wrap gap-2 text-xs">
-        <span className="text-gold">Taxi</span>
-        <span className="text-[#3cbfa8]">Bus</span>
-        <span className="text-cinnabar">U-Bahn</span>
-        <span className="text-[#8ecae6]">Fähre</span>
-        <span>Startfeld umrandet</span>
-        <span className="text-gold">Funkmast gestrichelt</span>
-        <span>Sehenswürdigkeit beschriftet</span>
+      </div>
+      {legend ? <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+        <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-5 rounded-sm" style={{ background: TAXI }} /> Taxi</span>
+        <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-5 rounded-sm" style={{ background: BUS }} /> Bus</span>
+        <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-5 rounded-sm" style={{ background: UG }} /> U-Bahn</span>
+        <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-5 rounded-sm bg-[#1a120c] ring-1 ring-paper/40" /> Fähre</span>
+        <span>Gelber Kreis Taxi, türkiser Halbkreis Bus, rotes Feld U-Bahn</span>
+        <span>Dick umrandet kannst du hin</span>
+        <span>Gestrichelter Kreis ist die letzte sichtbare Station</span>
         {detectives.map((player, index) => (
           <span key={player.id} style={{ color: COLORS[index % COLORS.length] }}>
             {player.name}
@@ -248,8 +274,10 @@ export function ScotlandBoard({ view, busy, onAction }: { view: ScotlandView; bu
           </span>
         ))}
         <span>Mr. X {view.positions.find((player) => player.id === view.mrXId)?.name}</span>
-      </div>
-      <div className="mt-3 flex gap-2 overflow-x-auto text-sm">
+      </div> : null}
+      <div className="mt-3">
+        <p className="text-sm">Fahrtenbuch</p>
+      <div className="mt-2 flex max-w-full gap-2 overflow-x-auto text-sm">
         {view.travel.map((move, index) => (
           <span key={`${move.round}-${index}`} className="rounded-full bg-white/10 px-2 py-1 whitespace-nowrap">
             {move.round} {ticketWord(move.ticket)}
@@ -257,23 +285,7 @@ export function ScotlandBoard({ view, busy, onAction }: { view: ScotlandView; bu
           </span>
         ))}
       </div>
-      {view.probeReady ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {(
-            [
-              ["analyse", "Analyse"],
-              ["ortung", "Ortung"],
-              ["abtasten", "Abtasten"],
-              ["befragung", "Befragung"],
-            ] as const
-          ).map(([kind, label]) => (
-            <button key={kind} className="btn btn-line" disabled={busy} onClick={() => onAction({ type: "sy-probe", kind })}>
-              {label}
-            </button>
-          ))}
-        </div>
-      ) : null}
-      {view.probe ? <p className="mt-2 text-sm">{probeText(view.probe)}</p> : null}
+      </div>
       {view.youAreUp && canDouble ? (
         <button className={`btn mt-3 ${double ? "btn-solid" : "btn-line"}`} onClick={() => { setDouble((value) => !value); setFirst(null); }}>
           Doppelzug
@@ -297,7 +309,7 @@ export function ScotlandBoard({ view, busy, onAction }: { view: ScotlandView; bu
                 setChoice([]);
               }}
             >
-              {ticketWord(double && !first ? move.ticket : (move.doubleTicket ?? move.ticket))}
+              {fareWord(view.city, double && first ? (move.doubleTo ?? move.to) : move.to, double && first ? (move.doubleTicket ?? move.ticket) : move.ticket, double && first ? first.to : view.home)}
             </button>
           ))}
         </div>

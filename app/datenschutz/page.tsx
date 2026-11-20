@@ -8,12 +8,12 @@ export const metadata: Metadata = {
 export default function DatenschutzPage() {
   return (
     <main className="wrap py-10">
-      <Link href="/eingang" className="font-display text-2xl">
+      <Link href="/eingang" className="font-display text-[22px] font-bold tracking-tight">
         Tafelrunde
       </Link>
-      <p className="kicker mt-12 text-gold">Datenschutz</p>
-      <h1 className="font-display mt-3 text-5xl">Was diese Seite speichert</h1>
-      <div className="mt-8 max-w-2xl space-y-6 text-paper/80">
+      <p className="kicker mt-8 text-gold">Datenschutz</p>
+      <h1 className="title mt-3">Was diese Seite speichert</h1>
+      <div className="copy mt-6 max-w-2xl space-y-4 text-paper/80">
         <p>
           Verantwortlich ist Max Ritschel, Oppspring 67, 45470 Mülheim an der Ruhr,{" "}
           <a className="underline" href="mailto:max.ritschel@gmx.de">
@@ -22,19 +22,21 @@ export default function DatenschutzPage() {
           . Es gibt keine Datenschutzbeauftragte und keinen Datenschutzbeauftragten. Die Seite ist ein privates Spiel
           für einen geschlossenen Kreis, kein Gewerbe.
         </p>
-        <h2 className="font-display text-3xl text-paper">Zugang</h2>
+        <h2 className="font-display text-[22px] font-bold tracking-tight text-paper">Zugang</h2>
         <p>
           Ohne den vierstelligen Code bleibt die Seite zu. Stimmt der Code, legt der Browser ein notwendiges Cookie
           namens <span className="text-paper">tr_eingang</span> an. Darin steht kein Code, sondern nur ein Nachweis,
           dass diese Tür schon aufging. Das Cookie ist für andere Seiten unsichtbar, gilt 30 Tage und dient allein
           dazu, den Kreis geschlossen zu halten. Rechtsgrundlage ist Artikel 6 Absatz 1 Buchstabe f DSGVO.
         </p>
-        <h2 className="font-display text-3xl text-paper">Am Tisch</h2>
+        <h2 className="font-display text-[22px] font-bold tracking-tight text-paper">Am Tisch</h2>
         <p>
           Es gibt keine Konten, keine Namen aus dem echten Leben und keine E-Mail-Adresse, die du einträgst. Beim
           ersten Platz setzt die Seite ein zweites notwendiges Cookie, <span className="text-paper">tr_guest</span>.
-          Es enthält ein zufälliges Kennzeichen, damit derselbe Browser denselben Platz behält. Auf dem Server liegt
-          dazu ein zufälliger Kosename aus dem Liebesthema, der Spielstand, Züge, geratene Wörter und bei Pictionary
+          Es enthält ein zufälliges Kennzeichen, damit derselbe Browser denselben Platz behält. Du suchst dir einen
+          Kosenamen aus einer festen Liste. Solange der Browser die Seite offen hat, bleibt dieser Name dir vorbehalten
+          und fehlt in der Liste der anderen. Gehst du weg, wird er wieder frei. Auf dem Server liegen dazu der
+          Kosename, der Zeitpunkt deines letzten Besuchs, der Spielstand, Züge, geratene Wörter und bei Pictionary
           die Zeichnung. Rechtsgrundlage ist Artikel 6 Absatz 1 Buchstabe b DSGVO, weil du das Spiel ausdrücklich
           benutzt.
         </p>
@@ -42,13 +44,13 @@ export default function DatenschutzPage() {
           Schreibe in Zeichnungen und Rateversuche keine echten Namen, Adressen oder Geheimnisse. Was dort steht,
           sehen die Leute am Tisch und bleibt im Spielstand gespeichert.
         </p>
-        <h2 className="font-display text-3xl text-paper">Wie lange</h2>
+        <h2 className="font-display text-[22px] font-bold tracking-tight text-paper">Wie lange</h2>
         <p>
           Beide Cookies liegen 30 Tage im Browser. Eine leere Lobby wird gelöscht, sobald die letzte Person aufsteht.
           Laufende und beendete Partien bleiben gespeichert, bis sie entfernt werden. Auf eine Nachricht an die oben
           genannte Adresse hin werden der Platz und die zugehörigen Partien gelöscht.
         </p>
-        <h2 className="font-display text-3xl text-paper">Wer sonst noch mithilft</h2>
+        <h2 className="font-display text-[22px] font-bold tracking-tight text-paper">Wer sonst noch mithilft</h2>
         <p>
           Die Seite läuft bei Vercel. Dabei können Verbindungsdaten anfallen, also IP-Adresse, Zeitpunkt und
           Browsertyp, damit die Seite ausgeliefert wird und Missbrauch erkennbar bleibt. Die Spieldaten liegen bei
@@ -56,7 +58,7 @@ export default function DatenschutzPage() {
           keine Weitergabe an andere. Die Schriften werden mit der Seite ausgeliefert. Beim Spielen ruft der Browser
           dafür keine fremde Schriftseite auf.
         </p>
-        <h2 className="font-display text-3xl text-paper">Deine Rechte</h2>
+        <h2 className="font-display text-[22px] font-bold tracking-tight text-paper">Deine Rechte</h2>
         <p>
           Du kannst Auskunft, Berichtigung, Löschung, Einschränkung und eine Kopie der Daten verlangen, soweit sie
           dich betreffen, und der Speicherung aus berechtigtem Interesse widersprechen. Eine Einwilligung ist hier

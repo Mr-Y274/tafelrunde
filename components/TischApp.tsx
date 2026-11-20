@@ -5,6 +5,7 @@ import type { TischData } from "@/lib/payload";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Anleitung } from "./Anleitung";
+import { NamenWahl } from "./NamenWahl";
 
 export function TischApp({ initial }: { initial: TischData }) {
   const router = useRouter();
@@ -57,21 +58,18 @@ export function TischApp({ initial }: { initial: TischData }) {
   }
 
   return (
-    <div className="space-y-8">
-      <section className="grid items-end gap-8 py-4 md:grid-cols-[1.2fr_.8fr]">
-        <h1 className="font-display text-5xl leading-[1.02] md:text-7xl">
-          Der Code
-          <br />
-          reicht.
-        </h1>
-        <p className="max-w-sm text-lg leading-relaxed text-paper/80">Kein Account. Am Tisch heißt du zum Beispiel honeyheart. Den Code gibst du weiter.</p>
+    <div className="space-y-6">
+      <section className="row-in py-2 md:grid md:grid-cols-[1.2fr_.8fr] md:items-end md:gap-10">
+        <h1 className="title">Der Code reicht.</h1>
+        <p className="copy mt-4 text-paper/80 md:mt-0">Kein Account. Such dir einen Namen aus. Der bleibt weg, solange du da bist. Den Tischcode gibst du weiter.</p>
       </section>
-      <form onSubmit={join} className="panel flex flex-wrap items-end gap-3 p-5">
-        <label className="min-w-40 flex-1">
+      <NamenWahl>
+      <form onSubmit={join} className="panel flex flex-col gap-3 p-4 sm:flex-row sm:items-end sm:p-5">
+        <label className="min-w-0 flex-1">
           Tischcode
-          <input className="field uppercase" value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} maxLength={6} required />
+          <input className="field uppercase" value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} maxLength={6} autoCapitalize="characters" autoCorrect="off" enterKeyHint="go" required />
         </label>
-        <button className="btn btn-solid" disabled={busy}>
+        <button className="btn btn-solid w-full sm:w-auto" disabled={busy}>
           Dazusetzen
         </button>
       </form>
@@ -81,19 +79,19 @@ export function TischApp({ initial }: { initial: TischData }) {
         </p>
       ) : null}
       <div className="panel p-5">
-        <h2 className="font-display text-2xl">Ein Spiel aufmachen</h2>
-        <ul className="mt-3 divide-y divide-ink/10">
+          <h2 className="font-display text-[22px] font-bold tracking-tight">Ein Spiel aufmachen</h2>
+        <ul className="mt-3 divide-y divide-ink/10 md:grid md:grid-cols-2 md:gap-x-10 md:divide-y-0">
           {CATALOG.map((game) => (
-            <li key={game.id} className="flex items-center justify-between gap-3 py-3">
-              <div>
-                <p className="font-display text-2xl">{game.name}</p>
-                <p className="text-sm opacity-70">
+            <li key={game.id} className="row-in flex flex-col gap-3 border-ink/10 py-4 md:flex-row md:items-center md:justify-between md:border-b">
+              <div className="min-w-0">
+                <p className="font-display text-[22px] font-bold tracking-tight">{game.name}</p>
+                <p className="copy opacity-70">
                   {game.players} · {game.blurb}
                 </p>
               </div>
-              <div className="flex shrink-0 gap-2">
+              <div className="flex gap-2">
                 <Anleitung id={game.id} />
-                <button className="btn btn-solid" disabled={busy} onClick={() => openGame(game.id)}>
+                <button className="btn btn-solid flex-1 sm:flex-none" disabled={busy} onClick={() => openGame(game.id)}>
                   Tisch
                 </button>
               </div>
@@ -103,7 +101,7 @@ export function TischApp({ initial }: { initial: TischData }) {
       </div>
       {data.tables.length > 0 ? (
         <div>
-          <h2 className="font-display text-2xl">Deine Tische</h2>
+          <h2 className="font-display text-[22px] font-bold tracking-tight">Deine Tische</h2>
           <ul className="mt-2">
             {data.tables.map((table) => (
               <li key={table.id}>
@@ -118,6 +116,7 @@ export function TischApp({ initial }: { initial: TischData }) {
           </ul>
         </div>
       ) : null}
+      </NamenWahl>
     </div>
   );
 }

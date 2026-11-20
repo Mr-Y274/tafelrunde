@@ -1,6 +1,5 @@
 import { PublicError } from "../errors";
-import type { LoveAnimal } from "./love";
-import type { Action, HerzCard, HerzGroup, HerzNeed, Player, Tempo, ZehnState, ZehnView } from "./types";
+import type { Action, HerzCard, HerzGroup, HerzNeed, PhaseColor, Player, Tempo, ZehnState, ZehnView } from "./types";
 import { pushLog, shuffle } from "./util";
 
 const PHASES: { label: string; groups: { kind: HerzNeed; n: number }[] }[] = [
@@ -11,31 +10,32 @@ const PHASES: { label: string; groups: { kind: HerzNeed; n: number }[] }[] = [
   { label: "eine Reihe zu acht", groups: [{ kind: "reihe", n: 8 }] },
   { label: "eine Reihe zu neun", groups: [{ kind: "reihe", n: 9 }] },
   { label: "zwei Sätze zu je vier", groups: [{ kind: "satz", n: 4 }, { kind: "satz", n: 4 }] },
-  { label: "sieben Karten von einem Tier", groups: [{ kind: "familie", n: 7 }] },
+  { label: "sieben Karten einer Farbe", groups: [{ kind: "familie", n: 7 }] },
   { label: "ein Satz zu fünf und ein Paar", groups: [{ kind: "satz", n: 5 }, { kind: "satz", n: 2 }] },
   { label: "ein Satz zu fünf und eine Reihe zu drei", groups: [{ kind: "satz", n: 5 }, { kind: "reihe", n: 3 }] },
 ];
 
-const TITLES: Record<HerzNeed, string> = { satz: "Satz", reihe: "Reihe", familie: "Familie" };
+const TITLES: Record<HerzNeed, string> = { satz: "Satz", reihe: "Reihe", familie: "Farbe" };
+const COLORS: PhaseColor[] = ["rot", "gelb", "gruen", "blau"];
 
 function deckOf(): HerzCard[] {
   const cards: HerzCard[] = [];
   let n = 0;
-  const animals: LoveAnimal[] = ["hase", "baer", "fuchs", "eule"];
-  for (const animal of animals) {
+  for (const color of COLORS) {
     for (let value = 1; value <= 12; value++) {
-      for (let copy = 0; copy < 2; copy++) cards.push({ id: `z${n++}`, kind: "zahl", animal, n: value });
+      for (let copy = 0; copy < 2; copy++) cards.push({ id: `z${n++}`, kind: "zahl", color, n: value });
     }
   }
-  for (let i = 0; i < 8; i++) cards.push({ id: `z${n++}`, kind: "kuss", animal: null, n: null });
-  for (let i = 0; i < 4; i++) cards.push({ id: `z${n++}`, kind: "schlaf", animal: null, n: null });
+  for (let i = 0; i < 8; i++) cards.push({ id: `z${n++}`, kind: "wild", color: null, n: null });
+  for (let i = 0; i < 4; i++) cards.push({ id: `z${n++}`, kind: "skip", color: null, n: null });
   return cards;
 }
 
 function valueOf(card: HerzCard) {
-  if (card.kind === "kuss") return 15;
-  if (card.kind === "schlaf") return 10;
-  return card.n ?? 0;
+  if (card.kind === "wild") return 25;
+  if (card.kind === "skip") return 15;
+  const face = card.n ?? 0;
+  return face >= 10 ? 10 : face;
 }
 
 function taskAt(index: number) {
@@ -96,18 +96,18 @@ function takeDeck(state: ZehnState) {
 }
 
 function resolve(kind: HerzNeed, cards: HerzCard[]): HerzGroup | null {
-  if (cards.some((card) => card.kind === "schlaf")) return null;
+  if (cards.some((card) => card.kind === "skip")) return null;
   if (kind === "satz") {
     const numbers = cards.filter((card) => card.kind === "zahl").map((card) => card.n ?? 0);
     if (new Set(numbers).size > 1) return null;
     const face = numbers[0] ?? 0;
-    return { owner: "", kind, face, animal: null, low: face, high: face, cards: cards.map((card) => ({ ...card, n: card.kind === "kuss" ? face || null : card.n })) };
+    return { owner: "", kind, face, color: null, low: face, high: face, cards: cards.map((card) => ({ ...card, n: card.kind === "wild" ? face || null : card.n })) };
   }
   if (kind === "familie") {
-    const animals = cards.filter((card) => card.kind === "zahl").map((card) => card.animal);
-    if (new Set(animals).size > 1) return null;
-    const animal = animals[0] ?? null;
-    return { owner: "", kind, face: 0, animal, low: 0, high: 0, cards: cards.map((card) => ({ ...card, animal: card.kind === "kuss" ? animal : card.animal })) };
+    const colors = cards.filter((card) => card.kind === "zahl").map((card) => card.color);
+    if (new Set(colors).size > 1) return null;
+    const color = colors[0] ?? null;
+    return { owner: "", kind, face: 0, color, low: 0, high: 0, cards: cards.map((card) => ({ ...card, color: card.kind === "wild" ? color : card.color })) };
   }
   const known = cards.flatMap((card) => (card.kind === "zahl" && card.n ? [card.n] : []));
   if (new Set(known).size !== known.length) return null;
@@ -126,7 +126,7 @@ function resolve(kind: HerzNeed, cards: HerzCard[]): HerzGroup | null {
       const face = open[wild++] ?? start;
       return { ...card, n: face };
     });
-    return { owner: "", kind, face: 0, animal: null, low: start, high: start + len - 1, cards: placed };
+    return { owner: "", kind, face: 0, color: null, low: start, high: start + len - 1, cards: placed };
   }
   return null;
 }
@@ -174,7 +174,7 @@ export function applyZehn(state: ZehnState, userId: string, action: Action): Zeh
     if (action.from === "ablage") {
       const top = state.discard.at(-1);
       if (!top) throw new PublicError("Die Ablage ist leer.");
-      if (top.kind === "schlaf") throw new PublicError("Schlaf bleibt liegen.");
+      if (top.kind === "skip") throw new PublicError("Skip bleibt liegen.");
       state.discard.pop();
       hand.push(top);
     } else hand.push(takeDeck(state));
@@ -204,7 +204,7 @@ export function applyZehn(state: ZehnState, userId: string, action: Action): Zeh
         return card;
       });
       const group = resolve(need.kind, cards);
-      if (!group) throw new PublicError("So ist das noch kein Satz, keine Reihe und keine Familie.");
+      if (!group) throw new PublicError("So ist das noch kein Satz, keine Reihe und keine Farbe.");
       group.owner = player.id;
       built.push(group);
     }
@@ -221,33 +221,33 @@ export function applyZehn(state: ZehnState, userId: string, action: Action): Zeh
     if (!state.down[player.id]) throw new PublicError("Erst die eigene Aufgabe legen.");
     const card = hand.find((item) => item.id === action.id);
     if (!card) throw new PublicError("Die Karte ist nicht auf deiner Hand.");
-    if (card.kind === "schlaf") throw new PublicError("Schlaf legt man nur ab.");
+    if (card.kind === "skip") throw new PublicError("Skip legt man nur ab.");
     if (hand.length < 2) throw new PublicError("Die letzte Karte wird abgelegt.");
     const group = state.laid[action.group];
     if (!group) throw new PublicError("Die Gruppe gibt es nicht.");
     if (group.kind === "satz") {
-      const face = card.kind === "kuss" ? group.face : card.n ?? 0;
+      const face = card.kind === "wild" ? group.face : card.n ?? 0;
       if (group.face !== 0 && card.kind === "zahl" && card.n !== group.face) throw new PublicError("Der Satz hat eine andere Zahl.");
       if (group.face === 0 && card.kind === "zahl") {
         group.face = card.n ?? 0;
         group.low = group.face;
         group.high = group.face;
       }
-      group.cards.push({ ...card, n: card.kind === "kuss" ? group.face || null : card.n });
+      group.cards.push({ ...card, n: card.kind === "wild" ? group.face || null : card.n });
     } else if (group.kind === "familie") {
-      if (group.animal && card.kind === "zahl" && card.animal !== group.animal) throw new PublicError("Das ist ein anderes Tier.");
-      if (!group.animal && card.kind === "zahl") group.animal = card.animal;
-      group.cards.push({ ...card, animal: card.kind === "kuss" ? group.animal : card.animal });
+      if (group.color && card.kind === "zahl" && card.color !== group.color) throw new PublicError("Das ist eine andere Farbe.");
+      if (!group.color && card.kind === "zahl") group.color = card.color;
+      group.cards.push({ ...card, color: card.kind === "wild" ? group.color : card.color });
     } else {
       const low = group.low;
       const high = group.high;
       let face = card.n ?? 0;
-      if (card.kind === "kuss") {
+      if (card.kind === "wild") {
         const canLow = low > 1;
         const canHigh = high < 12;
         if (!canLow && !canHigh) throw new PublicError("Die Reihe ist voll.");
         const edge = action.edge ?? (canLow && !canHigh ? "low" : !canLow && canHigh ? "high" : undefined);
-        if (!edge) throw new PublicError("Sag, an welches Ende der Kuss soll.");
+        if (!edge) throw new PublicError("Sag, an welches Ende der Wild soll.");
         if (edge === "low" && !canLow) throw new PublicError("Tiefer als 1 geht nicht.");
         if (edge === "high" && !canHigh) throw new PublicError("Höher als 12 geht nicht.");
         face = edge === "low" ? low - 1 : high + 1;
@@ -256,7 +256,7 @@ export function applyZehn(state: ZehnState, userId: string, action: Action): Zeh
       } else if (face === high + 1 && high < 12) {
         group.high = face;
       } else throw new PublicError("Die Reihe nimmt diese Zahl nicht.");
-      if (card.kind === "kuss") {
+      if (card.kind === "wild") {
         if (face === low - 1) group.low = face;
         if (face === high + 1) group.high = face;
       }
@@ -272,12 +272,12 @@ export function applyZehn(state: ZehnState, userId: string, action: Action): Zeh
     if (!card) throw new PublicError("Die Karte ist nicht auf deiner Hand.");
     state.hands[player.id] = hand.filter((item) => item.id !== card.id);
     state.discard.push(card);
-    if (card.kind === "schlaf") state.skip = true;
+    if (card.kind === "skip") state.skip = true;
     if (state.hands[player.id]!.length === 0) {
       closeRound(state, state.turn);
       return state;
     }
-    pushLog(state.log, `${player.name} legt ab${card.kind === "schlaf" ? " und jemand schläft" : ""}.`);
+    pushLog(state.log, `${player.name} legt ab${card.kind === "skip" ? " und jemand setzt aus" : ""}.`);
     pass(state);
     return state;
   }

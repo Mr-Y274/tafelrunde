@@ -30,7 +30,7 @@ export function EingangForm() {
       <label className="block">
         <span className="kicker text-gold">Zugangscode</span>
         <input
-          className="mt-3 w-full rounded-2xl border border-paper/20 bg-ink/40 px-4 py-3 text-2xl tracking-[0.4em] text-paper"
+          className="mt-3 w-full rounded-[12px] border border-paper/20 bg-ink/40 px-4 py-3 text-[28px] font-bold tracking-[0.2em] text-paper"
           inputMode="numeric"
           autoComplete="off"
           maxLength={4}
@@ -41,7 +41,7 @@ export function EingangForm() {
         />
       </label>
       {error ? <p className="mt-3 text-cinnabar">{error}</p> : null}
-      <button className="btn btn-solid mt-5" type="submit" disabled={busy || code.length !== 4}>
+      <button className="btn btn-solid mt-5 w-full sm:w-auto" type="submit" disabled={busy || code.length !== 4}>
         Eintreten
       </button>
     </form>

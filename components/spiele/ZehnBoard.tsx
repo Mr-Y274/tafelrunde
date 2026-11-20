@@ -3,6 +3,7 @@
 import type { ZehnView } from "@/lib/games/types";
 import { useState } from "react";
 import { Note } from "../Note";
+import { useArrivals } from "../motion";
 import { HerzFace } from "./LoveFace";
 
 export function ZehnBoard({ view, busy, onAction }: { view: ZehnView; busy: boolean; onAction: (body: Record<string, unknown>) => Promise<void> }) {
@@ -27,6 +28,10 @@ export function ZehnBoard({ view, busy, onAction }: { view: ZehnView; busy: bool
   }
 
   const ready = view.youAreUp && view.phase === "play" && !busy;
+  const fresh = useArrivals(
+    [view.discard ? `discard:${view.discard.id}` : "", ...view.hand.map((card) => `hand:${card.id}`), ...view.laid.flatMap((group) => group.cards.map((card) => `laid:${card.id}`))],
+    true,
+  );
 
   return (
     <section className="rounded-[1.4rem] bg-[#2a1d22] p-4 text-paper md:p-6">
@@ -49,8 +54,8 @@ export function ZehnBoard({ view, busy, onAction }: { view: ZehnView; busy: bool
         </button>
         {view.discard ? (
           <div className="text-center">
-            <HerzFace card={view.discard} />
-            <button className="btn btn-line mt-2" disabled={!view.youAreUp || view.phase !== "draw" || busy || view.discard.kind === "schlaf"} onClick={() => onAction({ type: "zehn-draw", from: "ablage" })} type="button">
+            <HerzFace card={view.discard} arrive={fresh.has(`discard:${view.discard.id}`)} />
+            <button className="btn btn-line mt-2" disabled={!view.youAreUp || view.phase !== "draw" || busy || view.discard.kind === "skip"} onClick={() => onAction({ type: "zehn-draw", from: "ablage" })} type="button">
               Nehmen
             </button>
           </div>
@@ -65,7 +70,7 @@ export function ZehnBoard({ view, busy, onAction }: { view: ZehnView; busy: bool
               </p>
               <div className="mt-1 flex flex-wrap gap-2">
                 {group.cards.map((card) => (
-                  <HerzFace key={card.id} card={card} />
+                  <HerzFace key={card.id} card={card} arrive={fresh.has(`laid:${card.id}`)} />
                 ))}
                 {ready && view.youDown && picked.length === 1 ? (
                   <>
@@ -117,7 +122,7 @@ export function ZehnBoard({ view, busy, onAction }: { view: ZehnView; busy: bool
       ) : null}
       <div className="mt-5 flex flex-wrap gap-2">
         {view.hand.map((card) => (
-          <HerzFace key={card.id} card={card} on={picked.includes(card.id)} disabled={!ready && view.phase !== "draw"} onClick={() => toggle(card.id)} />
+          <HerzFace key={card.id} card={card} on={picked.includes(card.id)} disabled={!ready && view.phase !== "draw"} onClick={() => toggle(card.id)} arrive={fresh.has(`hand:${card.id}`)} />
         ))}
       </div>
       {ready && picked.length === 1 ? (

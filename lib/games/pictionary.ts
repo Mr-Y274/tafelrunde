@@ -103,6 +103,13 @@ const WORDS: { word: string; category: string }[] = [
   { word: "Vogelscheuche", category: "Ding" },
 ];
 
+export function decoyWord(category: string, secret: string, taken: string[], rng: () => number) {
+  const pool = WORDS.filter((item) => item.category === category && item.word !== secret && !taken.includes(item.word));
+  const wider = pool.length > 0 ? pool : WORDS.filter((item) => item.word !== secret && !taken.includes(item.word));
+  const choice = wider.length > 0 ? wider : WORDS;
+  return choice[Math.floor(rng() * choice.length)]!.word;
+}
+
 export function normalizeGuess(value: string) {
   return value
     .toLowerCase()

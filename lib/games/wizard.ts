@@ -1,21 +1,50 @@
 import { randomUUID } from "node:crypto";
 import { PublicError } from "../errors";
-import type { Action, Player, Suit, Tempo, WCard, WizardState, WizardView } from "./types";
+import type { Action, Blatt, Player, Suit, Tempo, WCard, WizardState, WizardView } from "./types";
 import { pushLog, shuffle } from "./util";
 
-const SUITS: Suit[] = ["rot", "gelb", "gruen", "blau"];
+const COLOR: Suit[] = ["rot", "gelb", "gruen", "blau"];
+const SKAT: Suit[] = ["kreuz", "pik", "herz", "karo"];
+const SKAT_RANKS = [7, 8, 9, 10, 11, 12, 13, 14];
+
+export function wizardBlatt(value: unknown): Blatt {
+  return value === "skat" ? "skat" : "farbe";
+}
+
+export function wizardSuits(blatt: Blatt): Suit[] {
+  return blatt === "skat" ? SKAT : COLOR;
+}
 
 export function suitLabel(suit: Suit) {
   if (suit === "rot") return "Rot";
   if (suit === "gelb") return "Gelb";
   if (suit === "gruen") return "Grün";
-  return "Blau";
+  if (suit === "blau") return "Blau";
+  if (suit === "kreuz") return "Kreuz";
+  if (suit === "pik") return "Pik";
+  if (suit === "herz") return "Herz";
+  return "Karo";
 }
 
-function freshDeck(): WCard[] {
+export function rankLabel(rank: number, blatt: Blatt) {
+  if (blatt !== "skat") return String(rank);
+  if (rank === 11) return "B";
+  if (rank === 12) return "D";
+  if (rank === 13) return "K";
+  if (rank === 14) return "A";
+  return String(rank);
+}
+
+function deckCount(blatt: Blatt) {
+  return blatt === "skat" ? 40 : 60;
+}
+
+function freshDeck(blatt: Blatt): WCard[] {
   const cards: WCard[] = [];
-  for (const suit of SUITS) {
-    for (let rank = 1; rank <= 13; rank++) cards.push({ id: randomUUID(), t: "n", suit, rank });
+  const suits = wizardSuits(blatt);
+  const ranks = blatt === "skat" ? SKAT_RANKS : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+  for (const suit of suits) {
+    for (const rank of ranks) cards.push({ id: randomUUID(), t: "n", suit, rank });
   }
   for (let i = 0; i < 4; i++) {
     cards.push({ id: randomUUID(), t: "W" });
@@ -26,7 +55,7 @@ function freshDeck(): WCard[] {
 
 function deal(state: WizardState, rng: () => number) {
   const count = state.players.length;
-  const cards = shuffle(freshDeck(), rng);
+  const cards = shuffle(freshDeck(state.blatt === "skat" ? "skat" : "farbe"), rng);
   state.hands = {};
   for (const player of state.players) state.hands[player.id] = [];
   let cursor = 0;
@@ -70,14 +99,17 @@ function deal(state: WizardState, rng: () => number) {
   state.banner = `Runde ${state.round}. ${trumpText} ${state.players[state.turn]!.name} sagt an.`;
 }
 
-export function createWizard(players: Player[], tempo: Tempo, rng: () => number = Math.random): WizardState {
+export function createWizard(players: Player[], tempo: Tempo, rng: () => number = Math.random, blatt: Blatt = "farbe"): WizardState {
   if (players.length < 2 || players.length > 6) throw new PublicError("Wizard braucht 2 bis 6 Leute.");
+  const chosen = wizardBlatt(blatt);
+  const cards = deckCount(chosen);
   const state: WizardState = {
     kind: "wizard",
+    blatt: chosen,
     players,
     dealer: 0,
     round: 1,
-    maxRounds: tempo === "kurz" ? Math.min(6, Math.floor(60 / players.length)) : Math.floor(60 / players.length),
+    maxRounds: tempo === "kurz" ? Math.min(6, Math.floor(cards / players.length)) : Math.floor(cards / players.length),
     phase: "bid",
     hands: {},
     trumpCard: null,
@@ -167,6 +199,7 @@ export function applyWizard(state: WizardState, userId: string, action: Action):
   if (action.type === "trump") {
     if (state.phase !== "trump") throw new PublicError("Gerade wählt niemand eine Farbe.");
     if (index !== state.dealer) throw new PublicError("Der Geber wählt den Trumpf.");
+    if (!wizardSuits(state.blatt === "skat" ? "skat" : "farbe").includes(action.suit)) throw new PublicError("Diese Farbe gibt es nicht.");
     state.trumpSuit = action.suit;
     state.needsTrumpChoice = false;
     state.phase = "bid";
@@ -229,6 +262,7 @@ export function viewWizard(state: WizardState, userId: string): WizardView {
     youAreUp && state.phase === "play" ? hand.filter((card) => wizardCanPlay(hand, card, state.trick)).map((card) => card.id) : [];
   return {
     kind: "wizard",
+    blatt: state.blatt === "skat" ? "skat" : "farbe",
     phase: state.phase,
     round: state.round,
     maxRounds: state.maxRounds,

@@ -1,24 +1,14 @@
 import { PublicError } from "../errors";
 import { cityLinks, cityMap, type CityId } from "./city-maps";
-import type {
-  Action,
-  Player,
-  Ride,
-  ScotlandMove,
-  ScotlandProbe,
-  ScotlandState,
-  ScotlandTickets,
-  ScotlandView,
-  Tempo,
-  TravelTicket,
-} from "./types";
-import { pushLog } from "./util";
+import type { Action, Player, Ride, ScotlandMove, ScotlandState, ScotlandTickets, ScotlandView, Tempo, TravelTicket } from "./types";
+import { pushLog, shuffle } from "./util";
 
 const TRAVEL: TravelTicket[] = ["taxi", "bus", "ug", "black"];
+const REVEALS = [3, 8, 13, 18, 24];
 
-function bag(role: "mrx" | "det"): ScotlandTickets {
+function bag(role: "mrx" | "det", detectives = 0): ScotlandTickets {
   return role === "mrx"
-    ? { taxi: 4, bus: 3, ug: 3, black: 5, double: 2, heli: 2 }
+    ? { taxi: 4, bus: 3, ug: 3, black: detectives, double: 2, heli: 0 }
     : { taxi: 10, bus: 8, ug: 4, black: 0, double: 0, heli: 0 };
 }
 
@@ -26,107 +16,7 @@ function ticketLabel(ticket: Ride) {
   if (ticket === "taxi") return "Taxi";
   if (ticket === "bus") return "Bus";
   if (ticket === "ug") return "U-Bahn";
-  if (ticket === "heli") return "Hubschrauber";
   return "Schwarz";
-}
-
-function taxiSteps(city: CityId, from: number, to: number) {
-  if (from === to) return 0;
-  const dist = new Map<number, number>([[from, 0]]);
-  const queue = [from];
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    const soFar = dist.get(current)!;
-    for (const next of cityLinks(city, current, "taxi")) {
-      if (dist.has(next)) continue;
-      const value = soFar + 1;
-      if (next === to) return value;
-      dist.set(next, value);
-      queue.push(next);
-    }
-  }
-  return null;
-}
-
-function heliTargets(city: CityId, from: number) {
-  let best = Number.POSITIVE_INFINITY;
-  const found: number[] = [];
-  for (const sight of cityMap(city).sights) {
-    if (sight.id === from) continue;
-    const dist = taxiSteps(city, from, sight.id);
-    if (dist == null || dist <= 0) continue;
-    if (dist < best) {
-      best = dist;
-      found.length = 0;
-      found.push(sight.id);
-    } else if (dist === best) found.push(sight.id);
-  }
-  return found;
-}
-
-function band(dist: number | null): "nah" | "mittel" | "fern" {
-  if (dist == null || dist > 8) return "fern";
-  if (dist > 4) return "mittel";
-  return "nah";
-}
-
-export function createScotland(players: Player[], tempo: Tempo, rng: () => number = Math.random, city: CityId = "london"): ScotlandState {
-  if (players.length < 2 || players.length > 5) throw new PublicError("Scotland Yard braucht 2 bis 5 Leute.");
-  const mrIndex = Math.floor(rng() * players.length);
-  const mrX = players[mrIndex]!.id;
-  const detectives = players.filter((player) => player.id !== mrX).map((player) => player.id);
-  const tickets: Record<string, ScotlandTickets> = {};
-  const positions: Record<string, number | null> = {};
-  const map = cityMap(city);
-  const opening = map.opening[tempo];
-  for (const player of players) {
-    tickets[player.id] = bag(player.id === mrX ? "mrx" : "det");
-    positions[player.id] = null;
-  }
-  positions[mrX] = opening[0]!;
-  detectives.forEach((id, index) => {
-    positions[id] = opening[index + 1]!;
-  });
-  const hard = tempo === "kurz";
-  const banner = hard
-    ? `${players[mrIndex]!.name} ist Mr. X in ${map.name}. Kurze Jagd, schwer für ihn: er startet in der Mitte, die Detektive stehen nah.`
-    : `${players[mrIndex]!.name} ist Mr. X in ${map.name}. Lange Jagd, leichter für ihn: er startet am Rand, die Detektive stehen weit weg.`;
-  return {
-    kind: "scotland",
-    players,
-    mrX,
-    detectives,
-    positions,
-    tickets,
-    city,
-    round: 1,
-    maxRounds: hard ? 13 : 22,
-    reveals: hard ? [3, 8, 13] : [3, 8, 13, 18, 22],
-    phase: "mrx",
-    picker: 0,
-    moves: [],
-    meetings: pickMeetings(map.meetPool, rng),
-    meetHits: [],
-    probed: false,
-    probe: null,
-    banner,
-    log: [banner, ...detectives.map((id) => `${players.find((player) => player.id === id)?.name ?? "Jemand"} startet bei ${positions[id]}.`)],
-  };
-}
-
-function pickMeetings(poolSource: number[], rng: () => number) {
-  const pool = [...poolSource];
-  const picked: number[] = [];
-  while (picked.length < 5 && pool.length > 0) {
-    const index = Math.floor(rng() * pool.length);
-    picked.push(pool.splice(index, 1)[0]!);
-  }
-  return picked;
-}
-
-function shownCount(state: ScotlandState) {
-  const span = Math.max(1, state.maxRounds - 1);
-  return Math.min(state.meetings.length, 1 + Math.floor(((state.round - 1) * (state.meetings.length - 1)) / span));
 }
 
 function destinations(city: CityId, from: number, ticket: TravelTicket) {
@@ -138,11 +28,20 @@ function destinations(city: CityId, from: number, ticket: TravelTicket) {
   return cityLinks(city, from, ticket);
 }
 
-function stepsFrom(city: CityId, tickets: ScotlandTickets, from: number) {
+function occupiedByDetective(state: ScotlandState, station: number, except?: string) {
+  return state.detectives.some((id) => id !== except && state.positions[id] === station);
+}
+
+function stepsFrom(state: ScotlandState, userId: string, from: number) {
+  const mine = state.tickets[userId];
+  if (!mine) return [];
   const found: { to: number; ticket: TravelTicket }[] = [];
   for (const ticket of TRAVEL) {
-    if ((tickets[ticket] ?? 0) <= 0) continue;
-    for (const to of destinations(city, from, ticket)) found.push({ to, ticket });
+    if ((mine[ticket] ?? 0) <= 0) continue;
+    for (const to of destinations(state.city, from, ticket)) {
+      if (userId !== state.mrX && occupiedByDetective(state, to, userId)) continue;
+      found.push({ to, ticket });
+    }
   }
   return found;
 }
@@ -152,17 +51,17 @@ export function scotlandMoves(state: ScotlandState, userId: string): ScotlandMov
   if (from == null) return [];
   const mine = state.tickets[userId];
   if (!mine) return [];
-  const singles = stepsFrom(state.city, mine, from).map((step) => ({ to: step.to, ticket: step.ticket }));
-  const flight: ScotlandMove[] = userId === state.mrX && (mine.heli ?? 0) > 0 ? heliTargets(state.city, from).map((to) => ({ to, ticket: "heli" as const })) : [];
-  if (userId !== state.mrX || mine.double <= 0 || state.round >= state.maxRounds) return [...singles, ...flight];
+  const singles = stepsFrom(state, userId, from).map((step) => ({ to: step.to, ticket: step.ticket }));
+  if (userId !== state.mrX || mine.double <= 0 || state.round >= state.maxRounds) return singles;
   const doubles: ScotlandMove[] = [];
   for (const first of singles) {
     const left: ScotlandTickets = { ...mine, [first.ticket]: mine[first.ticket] - 1 };
-    for (const second of stepsFrom(state.city, left, first.to)) {
+    const secondState = { ...state, tickets: { ...state.tickets, [userId]: left }, positions: { ...state.positions, [userId]: first.to } };
+    for (const second of stepsFrom(secondState, userId, first.to)) {
       doubles.push({ to: first.to, ticket: first.ticket, doubleTo: second.to, doubleTicket: second.ticket });
     }
   }
-  return [...singles, ...flight, ...doubles];
+  return [...singles, ...doubles];
 }
 
 function actor(state: ScotlandState) {
@@ -171,36 +70,29 @@ function actor(state: ScotlandState) {
   return state.detectives[state.picker] ?? null;
 }
 
+function ownerOf(state: ScotlandState, id: string) {
+  return state.controls?.[id] ?? id;
+}
+
+function detectiveSide(state: ScotlandState) {
+  return [...new Set(state.detectives.map((id) => ownerOf(state, id)))];
+}
+
 function nameOf(state: ScotlandState, id: string) {
-  return state.players.find((player) => player.id === id)?.name ?? "Jemand";
+  const owner = ownerOf(state, id);
+  const name = state.players.find((player) => player.id === owner)?.name ?? "Jemand";
+  if (owner === id) return name;
+  const mine = state.detectives.filter((piece) => ownerOf(state, piece) === owner);
+  const index = mine.indexOf(id);
+  return index > 0 ? `${name} ${index + 1}` : name;
 }
 
 function caught(state: ScotlandState, by: string) {
   state.phase = "done";
   state.caughtBy = by;
-  state.winnerIds = state.detectives.slice();
+  state.winnerIds = detectiveSide(state);
   state.banner = `${nameOf(state, by)} fasst Mr. X.`;
   pushLog(state.log, state.banner);
-}
-
-function beginDetectives(state: ScotlandState) {
-  state.phase = "det";
-  state.picker = 0;
-  state.probed = false;
-  state.probe = null;
-  skipStuck(state);
-}
-
-function reachMeeting(state: ScotlandState, station: number) {
-  const shown = new Set(state.meetings.slice(0, shownCount(state)));
-  if (!shown.has(station) || state.meetHits.includes(station)) return false;
-  state.meetHits.push(station);
-  pushLog(state.log, state.meetHits.length >= 2 ? "Mr. X hat den zweiten Treffpunkt erreicht." : "Mr. X hat einen Treffpunkt erreicht.");
-  if (state.meetHits.length >= 2) {
-    mrXWins(state, "Mr. X hat zwei Treffpunkte erreicht.");
-    return true;
-  }
-  return false;
 }
 
 function mrXWins(state: ScotlandState, banner: string) {
@@ -212,25 +104,19 @@ function mrXWins(state: ScotlandState, banner: string) {
 
 function finishDetectives(state: ScotlandState) {
   if (state.round >= state.maxRounds) {
-    if (state.meetHits.length >= 1) mrXWins(state, "Mr. X erreicht einen Treffpunkt und entkommt.");
-    else {
-      state.phase = "done";
-      state.winnerIds = state.detectives.slice();
-      state.banner = "Mr. X hat keinen Treffpunkt erreicht.";
-      pushLog(state.log, state.banner);
-    }
+    mrXWins(state, "24 Züge sind um. Mr. X entkommt.");
     return;
   }
   state.round += 1;
   state.phase = "mrx";
   if (scotlandMoves(state, state.mrX).length === 0) {
     state.phase = "done";
-    state.winnerIds = state.detectives.slice();
+    state.winnerIds = detectiveSide(state);
     state.banner = "Mr. X sitzt fest.";
     pushLog(state.log, state.banner);
     return;
   }
-  state.banner = "Mr. X ist unterwegs.";
+  state.banner = state.reveals.includes(state.round) ? "Mr. X muss sich zeigen." : "Mr. X ist unterwegs.";
 }
 
 function skipStuck(state: ScotlandState) {
@@ -245,7 +131,7 @@ function skipStuck(state: ScotlandState) {
       state.banner = `${nameOf(state, id)} sucht eine Fahrt.`;
       return;
     }
-    pushLog(state.log, `${nameOf(state, id)} kommt nicht weiter.`);
+    pushLog(state.log, `${nameOf(state, id)} kommt nicht weiter und setzt aus.`);
     state.picker += 1;
     guard += 1;
     if (state.picker >= state.detectives.length) {
@@ -255,67 +141,98 @@ function skipStuck(state: ScotlandState) {
   }
 }
 
-function possibleStations(state: ScotlandState) {
-  let possible = new Set<number>(cityMap(state.city).stations.map((spot) => spot.id));
-  for (const move of state.moves) {
-    if (state.reveals.includes(move.round)) {
-      possible = new Set([move.station]);
-      continue;
-    }
-    const next = new Set<number>();
-    for (const from of possible) {
-      const hops = move.ticket === "heli" ? heliTargets(state.city, from) : destinations(state.city, from, move.ticket);
-      for (const hop of hops) next.add(hop);
-    }
-    possible = next;
+function beginDetectives(state: ScotlandState) {
+  state.phase = "det";
+  state.picker = 0;
+  const anyone = state.detectives.some((id) => scotlandMoves(state, id).some((move) => move.doubleTo == null));
+  if (!anyone) {
+    mrXWins(state, "Kein Detektiv kommt noch weiter.");
+    return;
   }
-  return [...possible].sort((a, b) => a - b);
+  skipStuck(state);
 }
 
-function investigate(state: ScotlandState, kind: ScotlandProbe["kind"]): ScotlandProbe {
-  const here = state.positions[state.mrX];
-  if (kind === "analyse") return { kind, stations: possibleStations(state) };
-  if (kind === "ortung") {
-    return {
-      kind,
-      masts: cityMap(state.city).masts.map((mast) => ({
-        id: mast.id,
-        name: mast.name,
-        band: band(here == null ? null : taxiSteps(state.city, here, mast.id)),
-      })),
-    };
+function hopWords(city: CityId, from: number, to: number, ticket: Ride) {
+  if (ticket === "black" && cityLinks(city, from, "water").includes(to)) return { mit: "der Fähre", nimmt: "die Fähre" };
+  const label = ticketLabel(ticket);
+  return { mit: `dem ${label}`, nimmt: `das ${label}` };
+}
+
+function note(state: ScotlandState, round: number, takes: string, at: number) {
+  if (state.reveals.includes(round)) pushLog(state.log, `Runde ${round}: Mr. X taucht bei ${at} auf, ${takes}.`);
+  else pushLog(state.log, `Runde ${round}: Mr. X nimmt ${takes}.`);
+}
+
+function handOver(state: ScotlandState, ticket: Ride) {
+  if (ticket !== "taxi" && ticket !== "bus" && ticket !== "ug") return;
+  const mine = state.tickets[state.mrX];
+  if (mine) mine[ticket] += 1;
+}
+
+function isBot(id: string) {
+  return id.startsWith("00000000-0000-4000-8000-");
+}
+
+export function createScotland(players: Player[], _tempo: Tempo, rng: () => number = Math.random, city: CityId = "london"): ScotlandState {
+  if (players.length < 2 || players.length > 6) throw new PublicError("Scotland Yard braucht 2 bis 6 Leute.");
+  const humans = players.filter((player) => !isBot(player.id));
+  const bot = players.find((player) => isBot(player.id));
+  const mrIndex = humans.length === 1 && bot && players.length === 2 ? players.findIndex((player) => player.id === bot.id) : Math.floor(rng() * players.length);
+  const mrX = players[mrIndex]!.id;
+  const seated = players.filter((player) => player.id !== mrX).map((player) => player.id);
+  const owners = seated.filter((id) => !isBot(id));
+  const controls: Record<string, string> = {};
+  const detectives = [...seated];
+  for (const id of detectives) controls[id] = id;
+  let extra = 0;
+  while (detectives.length < 3 && owners.length > 0) {
+    const owner = owners[extra % owners.length]!;
+    const id = `${owner}#${extra + 2}`;
+    detectives.push(id);
+    controls[id] = owner;
+    extra += 1;
   }
-  if (kind === "abtasten") {
-    const steps = cityMap(state.city).masts.reduce((best, mast) => {
-      const dist = here == null ? null : taxiSteps(state.city, here, mast.id);
-      return dist == null ? best : Math.min(best, dist);
-    }, Number.POSITIVE_INFINITY);
-    return { kind, steps: Number.isFinite(steps) ? steps : 0 };
-  }
-  const recent = state.moves.slice(-3).map((move) => move.station);
+  const map = cityMap(city);
+  const deck = shuffle([...map.starts], rng);
+  if (deck.length < detectives.length + 1) throw new PublicError("Zu wenige Startfelder.");
+  const positions: Record<string, number | null> = {};
+  const tickets: Record<string, ScotlandTickets> = {};
+  positions[mrX] = deck[0]!;
+  tickets[mrX] = bag("mrx", detectives.length);
+  detectives.forEach((id, index) => {
+    positions[id] = deck[index + 1]!;
+    tickets[id] = bag("det");
+  });
+  const banner = `${players[mrIndex]!.name} ist Mr. X in ${map.name}. Die Startfelder sind gezogen.`;
   return {
-    kind: "befragung",
-    witnesses: cityMap(state.city).sights.map((sight) => ({
-      id: sight.id,
-      name: sight.name,
-      saw: here === sight.id ? "hier" : recent.includes(sight.id) ? "vor kurzem" : "still",
-    })),
+    kind: "scotland",
+    players,
+    mrX,
+    detectives,
+    controls,
+    positions,
+    tickets,
+    city,
+    round: 1,
+    maxRounds: 24,
+    reveals: REVEALS,
+    phase: "mrx",
+    picker: 0,
+    moves: [],
+    meetings: [],
+    meetHits: [],
+    probed: false,
+    probe: null,
+    banner,
+    log: [banner],
   };
-}
-
-function note(state: ScotlandState, round: number, ticket: Ride, at: number) {
-  if (state.reveals.includes(round)) {
-    pushLog(state.log, `Runde ${round}: Mr. X taucht bei ${at} auf, ${ticketLabel(ticket)}.`);
-  } else {
-    pushLog(state.log, `Runde ${round}: Mr. X nimmt das ${ticketLabel(ticket)}.`);
-  }
 }
 
 export function applyScotland(state: ScotlandState, userId: string, action: Action): ScotlandState {
   if (state.city !== "london" && state.city !== "paris" && state.city !== "barcelona") state.city = "london";
   if (state.phase === "done") throw new PublicError("Die Jagd ist vorbei.");
-  const current = actor(state);
-  if (current !== userId) throw new PublicError("Du bist nicht dran.");
+  const piece = actor(state);
+  if (!piece || ownerOf(state, piece) !== userId) throw new PublicError("Du bist nicht dran.");
 
   if (action.type === "sy-start") {
     if (state.phase !== "mrx-start" && state.phase !== "det-start") throw new PublicError("Die Startfelder sind schon gewählt.");
@@ -327,28 +244,24 @@ export function applyScotland(state: ScotlandState, userId: string, action: Acti
       state.banner = `${nameOf(state, state.detectives[0]!)} wählt einen Start.`;
       return state;
     }
-    const occupied = state.detectives.some((id) => state.positions[id] === action.station);
-    if (occupied) throw new PublicError("Dort steht schon ein Detektiv.");
+    if (occupiedByDetective(state, action.station, piece)) throw new PublicError("Dort steht schon ein Detektiv.");
+    state.positions[piece] = action.station;
     if (state.positions[state.mrX] === action.station) {
-      state.positions[userId] = action.station;
-      caught(state, userId);
+      caught(state, piece);
       return state;
     }
-    state.positions[userId] = action.station;
     state.picker += 1;
     if (state.picker >= state.detectives.length) {
       state.phase = "mrx";
       state.banner = "Mr. X setzt sich in Bewegung.";
-    } else {
-      state.banner = `${nameOf(state, state.detectives[state.picker]!)} wählt einen Start.`;
-    }
+    } else state.banner = `${nameOf(state, state.detectives[state.picker]!)} wählt einen Start.`;
     return state;
   }
 
   if (action.type === "sy-move") {
     if (state.phase !== "mrx" && state.phase !== "det") throw new PublicError("Gerade wird nicht gefahren.");
     if (state.phase === "det" && action.doubleTo != null) throw new PublicError("Detektive haben keinen Doppelzug.");
-    const match = scotlandMoves(state, userId).find(
+    const match = scotlandMoves(state, piece).find(
       (move) =>
         move.to === action.to &&
         move.ticket === action.ticket &&
@@ -356,13 +269,17 @@ export function applyScotland(state: ScotlandState, userId: string, action: Acti
         (move.doubleTicket ?? null) === (action.doubleTicket ?? null),
     );
     if (!match) throw new PublicError("Diese Fahrt geht nicht.");
-    const mine = state.tickets[userId]!;
+    const mine = state.tickets[piece]!;
+    const from = state.positions[piece];
+    if (from == null) throw new PublicError("Diese Fahrt geht nicht.");
+    const hop = hopWords(state.city, from, match.to, match.ticket);
     mine[match.ticket] -= 1;
     if (state.phase === "det") {
-      state.positions[userId] = match.to;
-      pushLog(state.log, `${nameOf(state, userId)} fährt mit dem ${ticketLabel(match.ticket)} nach ${match.to}.`);
+      handOver(state, match.ticket);
+      state.positions[piece] = match.to;
+      pushLog(state.log, `${nameOf(state, piece)} fährt mit ${hop.mit} nach ${match.to}.`);
       if (state.positions[state.mrX] === match.to) {
-        caught(state, userId);
+        caught(state, piece);
         return state;
       }
       state.picker += 1;
@@ -371,9 +288,8 @@ export function applyScotland(state: ScotlandState, userId: string, action: Acti
       return state;
     }
     state.moves.push({ round: state.round, ticket: match.ticket, station: match.to });
-    note(state, state.round, match.ticket, match.to);
+    note(state, state.round, hop.nimmt, match.to);
     state.positions[state.mrX] = match.to;
-    if (reachMeeting(state, match.to)) return state;
     const firstSpotter = state.detectives.find((id) => state.positions[id] === match.to);
     if (firstSpotter) {
       caught(state, firstSpotter);
@@ -383,10 +299,10 @@ export function applyScotland(state: ScotlandState, userId: string, action: Acti
       mine.double -= 1;
       mine[match.doubleTicket] -= 1;
       state.round += 1;
+      const secondHop = hopWords(state.city, match.to, match.doubleTo, match.doubleTicket);
       state.moves.push({ round: state.round, ticket: match.doubleTicket, station: match.doubleTo });
-      note(state, state.round, match.doubleTicket, match.doubleTo);
+      note(state, state.round, secondHop.nimmt, match.doubleTo);
       state.positions[state.mrX] = match.doubleTo;
-      if (reachMeeting(state, match.doubleTo)) return state;
       const secondSpotter = state.detectives.find((id) => state.positions[id] === match.doubleTo);
       if (secondSpotter) {
         caught(state, secondSpotter);
@@ -397,59 +313,50 @@ export function applyScotland(state: ScotlandState, userId: string, action: Acti
     return state;
   }
 
-  if (action.type === "sy-probe") {
-    if (state.phase !== "det") throw new PublicError("Ermittelt wird im Zug der Detektive.");
-    if (!state.detectives.includes(userId)) throw new PublicError("Nur die Detektive ermitteln.");
-    if (state.probed) throw new PublicError("Diese Runde wurde schon ermittelt.");
-    state.probed = true;
-    state.probe = investigate(state, action.kind);
-    const title = action.kind === "analyse" ? "Analyse" : action.kind === "ortung" ? "Ortung" : action.kind === "abtasten" ? "Abtasten" : "Befragung";
-    state.banner = `Die Detektive nutzen die ${title}.`;
-    pushLog(state.log, state.banner);
-    return state;
-  }
-
   throw new PublicError("Das geht in Scotland Yard gerade nicht.");
 }
 
 export function viewScotland(state: ScotlandState, userId: string): ScotlandView {
   if (state.city !== "london" && state.city !== "paris" && state.city !== "barcelona") state.city = "london";
   const youAreMrX = userId === state.mrX;
-  const current = actor(state);
+  const piece = actor(state);
+  const youAreUp = piece != null && ownerOf(state, piece) === userId;
+  const yours = youAreMrX ? state.mrX : state.detectives.find((id) => ownerOf(state, id) === userId) ?? null;
+  const focus = youAreUp && piece ? piece : yours;
   const latest = state.moves[state.moves.length - 1];
-  const visibleNow = youAreMrX || (latest != null && state.reveals.includes(latest.round));
+  const visibleNow = youAreMrX || (latest != null && state.reveals.includes(latest.round) && state.phase !== "mrx");
   const lastReveal = [...state.moves].reverse().find((move) => state.reveals.includes(move.round));
-  const moves = current === userId && (state.phase === "mrx" || state.phase === "det") ? scotlandMoves(state, userId) : [];
+  const moves = youAreUp && piece && (state.phase === "mrx" || state.phase === "det") ? scotlandMoves(state, piece) : [];
   const choices =
-    current === userId && (state.phase === "mrx-start" || state.phase === "det-start")
-      ? cityMap(state.city).starts.filter((id) => {
-          if (state.phase === "mrx-start") return true;
-          return !state.detectives.some((detective) => state.positions[detective] === id);
-        })
+    youAreUp && piece && (state.phase === "mrx-start" || state.phase === "det-start")
+      ? cityMap(state.city).starts.filter((id) => state.phase === "mrx-start" || !occupiedByDetective(state, id, piece))
       : null;
   return {
     kind: "scotland",
     phase: state.phase,
-    youAreUp: current === userId,
+    youAreUp,
     youAreMrX,
     city: state.city,
     mrXId: state.mrX,
     round: state.round,
     maxRounds: state.maxRounds,
     reveals: state.reveals,
-    turnId: current,
-    positions: state.players.map((player) => ({
-      id: player.id,
-      name: player.name,
-      role: player.id === state.mrX ? "mrx" : "det",
-      station:
-        player.id === state.mrX
-          ? visibleNow
-            ? state.positions[player.id]
-            : null
-          : state.positions[player.id],
-    })),
-    tickets: { ...(state.tickets[userId] ?? bag("det")) },
+    turnId: piece,
+    positions: [
+      {
+        id: state.mrX,
+        name: nameOf(state, state.mrX),
+        role: "mrx" as const,
+        station: visibleNow ? state.positions[state.mrX] ?? null : null,
+      },
+      ...state.detectives.map((id) => ({
+        id,
+        name: nameOf(state, id),
+        role: "det" as const,
+        station: state.positions[id] ?? null,
+      })),
+    ],
+    tickets: { ...(state.tickets[focus ?? ""] ?? bag(youAreMrX ? "mrx" : "det")) },
     travel: state.moves.map((move) => ({
       round: move.round,
       ticket: move.ticket,
@@ -457,19 +364,19 @@ export function viewScotland(state: ScotlandState, userId: string): ScotlandView
     })),
     lastSeen: lastReveal ? { round: lastReveal.round, station: lastReveal.station } : null,
     choices,
-    home: state.positions[userId] ?? null,
+    home: focus ? state.positions[focus] ?? null : null,
     moves: state.phase === "det" ? moves.filter((move) => move.doubleTo == null) : moves,
     specials: {
       black: state.tickets[state.mrX]?.black ?? 0,
       double: state.tickets[state.mrX]?.double ?? 0,
-      heli: state.tickets[state.mrX]?.heli ?? 0,
+      heli: 0,
     },
-    meetHits: state.meetHits.length,
-    meetings: youAreMrX ? state.meetings.slice(0, shownCount(state)).map((station) => ({ station, hit: state.meetHits.includes(station) })) : null,
-    sights: cityMap(state.city).sights.map((sight) => ({ id: sight.id, name: sight.name })),
-    masts: cityMap(state.city).masts.map((mast) => ({ id: mast.id, name: mast.name })),
-    probeReady: state.phase === "det" && current === userId && !state.probed,
-    probe: youAreMrX ? null : state.probe,
+    meetHits: 0,
+    meetings: null,
+    sights: [],
+    masts: [],
+    probeReady: false,
+    probe: null,
     banner: state.banner,
     log: state.log,
     winnerIds: state.winnerIds,

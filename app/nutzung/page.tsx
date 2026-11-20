@@ -8,31 +8,31 @@ export const metadata: Metadata = {
 export default function NutzungPage() {
   return (
     <main className="wrap py-10">
-      <Link href="/eingang" className="font-display text-2xl">
+      <Link href="/eingang" className="font-display text-[22px] font-bold tracking-tight">
         Tafelrunde
       </Link>
-      <p className="kicker mt-12 text-gold">Nutzung</p>
-      <h1 className="font-display mt-3 text-5xl">Hausregeln für den Kreis</h1>
-      <div className="mt-8 max-w-2xl space-y-6 text-paper/80">
+      <p className="kicker mt-8 text-gold">Nutzung</p>
+      <h1 className="title mt-3">Hausregeln für den Kreis</h1>
+      <div className="copy mt-6 max-w-2xl space-y-4 text-paper/80">
         <p>
           Tafelrunde ist ein privates, unentgeltliches Spiel von Max Ritschel für einen eingeladenen Kreis. Es ist
           kein Laden, kein Verein und kein Angebot an die Öffentlichkeit. Der Zugangscode bleibt im Kreis.
         </p>
-        <h2 className="font-display text-3xl text-paper">Am Tisch</h2>
+        <h2 className="font-display text-[22px] font-bold tracking-tight text-paper">Am Tisch</h2>
         <p>
           Gezeichnet und geraten wird so, dass niemand verletzt, bedroht oder bloßgestellt wird. Nichts Rechtswidriges,
           keine Daten anderer Leute, keine Werbung. Wer den Tisch verlässt, gibt den Platz frei. Die gastgebende
           Person startet die Runde.
         </p>
-        <h2 className="font-display text-3xl text-paper">Die Spiele</h2>
+        <h2 className="font-display text-[22px] font-bold tracking-tight text-paper">Die Spiele</h2>
         <p>
           Die Partien sind eigene Umsetzungen für diesen Tisch. Es werden keine Spielbretter, Kartenbilder oder
-          Regeltexte der Verlage verwendet. Wizard, Uno, Scotland Yard, Pictionary, Phase 10, MAU MAU und Vier
+          Regeltexte der Verlage verwendet. Wizard, Uno, Scotland Yard, Pictionary, Phase 10, Skip-Bo und Vier
           gewinnt sind bekannte Spiele und, soweit geschützt, Marken ihrer Inhaber. Tafelrunde steht mit diesen
           Verlagen in keiner Verbindung. Die Namen stehen hier nur, damit der Kreis das Spiel wiedererkennt.
-          Schiffe versenken, Stapeln und Memo heißen hier so. Die Bilder von London, Paris und Barcelona sind eigene Ansichten für diesen Tisch.
+          Schiffe versenken und Memo heißen hier so. Die Bretter von London, Paris und Barcelona sind eigene Zeichnungen für diesen Tisch.
         </p>
-        <h2 className="font-display text-3xl text-paper">Wenn etwas hakt</h2>
+        <h2 className="font-display text-[22px] font-bold tracking-tight text-paper">Wenn etwas hakt</h2>
         <p>
           Die Seite kann pausieren, einen Stand verlieren oder sich ändern. Dafür gibt es kein Entgelt und keine
           Zusage, dass eine Partie zu Ende spielbar bleibt. Für Vorsatz und grobe Fahrlässigkeit sowie für Schäden an
