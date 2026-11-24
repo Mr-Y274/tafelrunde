@@ -78,7 +78,7 @@ function StationMark({ x, y, id, modes }: { x: number; y: number; id: number; mo
 
 export function ScotlandBoard({ view, busy, onAction }: { view: ScotlandView; busy: boolean; onAction: (body: Record<string, unknown>) => Promise<void> }) {
   const [startAt, setStartAt] = useState<number | null>(null);
-  const [near, setNear] = useState(true);
+  const [near, setNear] = useState(false);
   const [legend, setLegend] = useState(true);
   const [double, setDouble] = useState(false);
   const frame = useRef<HTMLDivElement>(null);
@@ -186,21 +186,26 @@ export function ScotlandBoard({ view, busy, onAction }: { view: ScotlandView; bu
         </div>
       </div>
       <div className="mt-2 max-w-full min-w-0 rounded-2xl bg-[#8d6940] p-1.5 sm:p-2">
-      <div ref={frame} className={`max-w-full min-w-0 overscroll-contain bg-[#f4e8d0] ${near ? "max-h-[62dvh] touch-pan-x touch-pan-y overflow-auto sm:max-h-[72vh]" : "overflow-x-auto"}`}>
-      <svg viewBox={`0 0 ${map.width} ${map.height}`} className={near ? "h-auto w-[1560px] max-w-none sm:w-[2000px]" : "h-auto w-full"} role="img" aria-label={`${map.name}, das Spielbrett`}>
-        <rect width={map.width} height={map.height} fill="#e4d3ae" />
-        {map.parks.map((park) => (
-          <ellipse key={park.name} cx={park.x} cy={park.y} rx={park.rx} ry={park.ry} fill="#b7d39a" opacity="0.85" />
-        ))}
-        {map.river.length > 1 ? (
-          <polyline points={map.river.map((point) => `${point.x},${point.y}`).join(" ")} fill="none" stroke="#8ec4e6" strokeWidth="70" strokeLinecap="round" strokeLinejoin="round" />
-        ) : null}
-        {map.labels.map((label) => (
-          <text key={label.name} x={label.x} y={label.y} fill="#6d5a40" fontSize="28" fontFamily="var(--font-fraunces), Georgia, serif">
-            {label.name}
-          </text>
-        ))}
-        {map.image ? <image href={map.image} x="0" y="0" width={map.width} height={map.height} opacity="0.28" /> : null}
+      <div ref={frame} className={`max-w-full min-w-0 bg-[#f4e8d0] ${near ? "max-h-[62dvh] touch-pan-x touch-pan-y overflow-auto overscroll-contain sm:max-h-[72vh]" : "overflow-visible"}`}>
+      <svg viewBox={`0 0 ${map.width} ${map.height}`} className={near ? "h-auto w-[1560px] max-w-none sm:w-[2000px]" : "block h-auto w-full"} role="img" aria-label={`${map.name}, das Spielbrett`}>
+        <rect width={map.width} height={map.height} fill="#c8ae86" />
+        {map.image ? (
+          <image href={map.image} xlinkHref={map.image} x="0" y="0" width={Math.min(map.width, Math.round(map.height * (4 / 3)))} height={map.height} preserveAspectRatio="xMidYMid slice" />
+        ) : (
+          <>
+            {map.parks.map((park) => (
+              <ellipse key={park.name} cx={park.x} cy={park.y} rx={park.rx} ry={park.ry} fill="#b7d39a" opacity="0.85" />
+            ))}
+            {map.river.length > 1 ? (
+              <polyline points={map.river.map((point) => `${point.x},${point.y}`).join(" ")} fill="none" stroke="#8ec4e6" strokeWidth="70" strokeLinecap="round" strokeLinejoin="round" />
+            ) : null}
+            {map.labels.map((label) => (
+              <text key={label.name} x={label.x} y={label.y} fill="#6d5a40" fontSize="28" fontFamily="var(--font-fraunces), Georgia, serif">
+                {label.name}
+              </text>
+            ))}
+          </>
+        )}
         {citySegments(view.city)
           .slice()
           .sort((a, b) => (a.mode === "water" || a.mode === "ug" ? 1 : 0) - (b.mode === "water" || b.mode === "ug" ? 1 : 0))
